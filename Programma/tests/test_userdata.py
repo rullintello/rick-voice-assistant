@@ -77,6 +77,27 @@ class DeleteAllTest(unittest.TestCase):
         text = startup.LOG_FILE.read_text(encoding="utf-8")
         self.assertNotIn("Zelda", text)
 
+    def test_open_log_is_found_under_another_spelling_of_its_path(self):
+        # On Windows the same folder can be spelled two ways (RUNNER~1 vs
+        # runneradmin): the log must be recognised as the same file anyway.
+        # A symlinked folder gives the same "two names, one file" on Linux.
+        alias = self.tmp.parent / (self.tmp.name + "-alias")
+        try:
+            alias.symlink_to(self.tmp, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("can't create a symlink here")
+        self.addCleanup(alias.unlink)
+        handler = logging.FileHandler(alias / startup.LOG_FILE.name, encoding="utf-8")
+        root = logging.getLogger()
+        root.addHandler(handler)
+        self.addCleanup(handler.close)
+        self.addCleanup(root.removeHandler, handler)
+        root.error("a line mentioning Zelda")
+        with unittest.mock.patch.object(userdata, "remove_quietly"):  # like Windows: an open file can't be deleted
+            userdata.delete_all()
+        handler.flush()
+        self.assertNotIn("Zelda", startup.LOG_FILE.read_text(encoding="utf-8"))
+
     def test_nothing_saved_yet_is_fine(self):
         userdata.delete_all()
 

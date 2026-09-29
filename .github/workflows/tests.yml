@@ -1,0 +1,52 @@
+# Runs Rick's automated tests on every change, on Windows (what Rick is
+# made for) and Linux. The result is the "tests" badge in the README.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.14"
+          - os: ubuntu-latest
+            python: "3.12"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: Programma/requirements.txt
+
+      - name: Linux audio and virtual display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 xvfb
+
+      - name: Install Rick's libraries (the same pinned versions users get)
+        run: python -m pip install --disable-pip-version-check -r Programma/requirements.txt
+
+      - name: Run the tests (Windows)
+        if: runner.os == 'Windows'
+        working-directory: Programma
+        run: python -m unittest discover -s tests -v
+
+      - name: Run the tests (Linux)
+        if: runner.os == 'Linux'
+        working-directory: Programma
+        run: xvfb-run -a python -m unittest discover -s tests -v
