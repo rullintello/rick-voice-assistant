@@ -2,6 +2,12 @@
 
 <p align="center"><img src="Programma/assets/rick_cover.png" alt="Rick, il gatto mago / Rick, the wizard cat" width="384"></p>
 
+<p align="center">
+  <a href="https://github.com/rullintello/rick-voice-assistant/actions/workflows/tests.yml"><img src="https://github.com/rullintello/rick-voice-assistant/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
+  <a href="https://github.com/rullintello/rick-voice-assistant/releases/latest"><img src="https://img.shields.io/github/v/release/rullintello/rick-voice-assistant" alt="release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/rullintello/rick-voice-assistant" alt="license"></a>
+</p>
+
 *[Read this in English](#rick--voice-assistant-for-video-games)*
 
 Gratuito, open source (licenza [GPLv3](LICENSE)). Se Rick ti piace e vuoi
