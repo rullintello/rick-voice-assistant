@@ -74,7 +74,7 @@ def _clear_log() -> None:
     log_file = Path(startup.LOG_FILE)
     emptied = False
     for handler in logging.getLogger().handlers:
-        if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename) == log_file.resolve():
+        if _writes_to(handler, log_file):
             with contextlib.suppress(OSError, ValueError):
                 handler.acquire()
                 try:
@@ -88,3 +88,15 @@ def _clear_log() -> None:
         remove_quietly(log_file)
     for rotated in log_file.parent.glob(f"{log_file.name}.*"):
         remove_quietly(rotated)
+
+
+def _writes_to(handler: logging.Handler, path: Path) -> bool:
+    """Whether `handler` is writing to `path`. Compared as files, not as
+    text: on Windows one folder can be spelled two ways (C:\\Users\\RUNNER~1
+    and C:\\Users\\runneradmin), and a mismatch would leave the log behind."""
+    if not isinstance(handler, logging.FileHandler):
+        return False
+    try:
+        return os.path.samefile(handler.baseFilename, path)
+    except OSError:  # either file missing: nothing open to empty there
+        return False
