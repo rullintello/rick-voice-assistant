@@ -21,6 +21,7 @@ PACKAGE_OF = {
     "dotenv": "python-dotenv",
     "faster_whisper": "faster-whisper",
     "edge_tts": "edge-tts",
+    "comtypes": "comtypes",  # Windows only: its built-in voices
 }
 
 try:
