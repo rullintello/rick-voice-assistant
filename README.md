@@ -1,6 +1,6 @@
-# Rick — assistente vocale per videogiochi
+# Rick — voice assistant for video games
 
-<p align="center"><img src="Programma/assets/rick_cover.png" alt="Rick, il gatto mago / Rick, the wizard cat" width="384"></p>
+<p align="center"><img src="Programma/assets/rick_cover.png" alt="Rick, the wizard cat / Rick, il gatto mago" width="384"></p>
 
 <p align="center">
   <a href="https://github.com/rullintello/rick-voice-assistant/actions/workflows/tests.yml"><img src="https://github.com/rullintello/rick-voice-assistant/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
@@ -8,6 +8,298 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/rullintello/rick-voice-assistant" alt="license"></a>
   <a href="https://www.virustotal.com/gui/file/2a4a1288cc2b2f514c4ca0e279ed0e8a5e2f98f5bba97a956f768c0f93e5a430"><img src="https://img.shields.io/badge/VirusTotal-0%2F66%20(v1.0.0)-brightgreen" alt="VirusTotal 0/66"></a>
 </p>
+
+*[Leggi questo in italiano](#rick--assistente-vocale-per-videogiochi)*
+
+Free, open source ([GPLv3](LICENSE) license). If you like Rick and want to
+buy me a coffee (optional): [ko-fi.com/rullintello](https://ko-fi.com/rullintello).
+
+Rick is an assistant that runs in the background while you play. Press
+**Alt+R** to activate the microphone, ask your question ("how do I beat this
+boss?", "where's the legendary sword?", ...) and Rick answers out loud.
+
+## How it works
+
+1. Press `Alt+R` (works even while the game is focused) → you'll hear a
+   **high-pitched beep** and the microphone starts recording.
+2. Press `Alt+R` again → you'll hear a **lower beep** and the recording
+   stops.
+3. Rick transcribes what you said, searches the web (if you've set up
+   search, see below) and asks Google Gemini for an answer tailored to
+   in-game help, then reads it to you out loud.
+
+The two beeps let you know when recording starts/stops even while the game
+is focused: in true exclusive fullscreen, no window (not even Rick's own) is
+visible over the game, so they're the only reliable way to know. If you play
+windowed or borderless fullscreen instead, you can also see Rick's window.
+
+If Rick is still talking and you want to interrupt him with a new question,
+press `Alt+R` again: he stops talking immediately and starts listening right
+away (same high beep as usual), no need to wait for him to finish.
+
+Rick remembers the last few questions/answers of the session, so you only
+need to tell him once which game you're playing and where you are.
+
+## Rick's window
+
+Instead of a black console, Rick looks like a book: on the left, **binders**,
+one per game you've asked about; on the right, the open "page" with that
+binder's conversation.
+
+- Top left is the **"Current game"** field: picking a game you've already
+  used from the dropdown switches to it right away. Typing a new name
+  instead is just a draft until you press **💾 Save**: that renames the open
+  binder (history included) to that name. If a binder with that name
+  already exists, Rick asks first whether to merge the two histories.
+- **🆕 New chat** opens a blank page to start a fresh conversation (Rick
+  forgets the previous one), without deleting the one you were looking at.
+- **🗑️ Delete** permanently removes the open binder (asks for confirmation
+  first).
+- **Delete all your data** (bottom right) erases everything Rick has saved
+  on this PC: binders, keys, cache and error log. It asks first, then Rick
+  closes (see "Privacy and data").
+- Clicking a binder in the list on the left reopens it and makes it the
+  active one, to review past questions or keep asking new ones about that
+  game.
+- Everything is saved automatically on your PC (`~/.rick/history.json`,
+  outside the project, never shared on GitHub): close and reopen Rick
+  whenever you want, the binders are still there.
+
+Rick also re-reads its own past answers for that game (up to 10, the most
+recent) before answering again: if you've asked something similar before,
+maybe in an earlier session, it can answer right away instead of having to
+search everything from scratch - also handy so you don't have to re-explain
+the game and where you are. This doesn't apply to the "Untitled" binder,
+which can mix different games: name the chat with **💾 Save** to turn it on.
+
+If something goes wrong and Rick won't start, since there's no console
+you won't see an error message on screen: instead, a small popup tells you
+where to find the technical details, saved to `~/.rick/rick.log`. If the
+problem comes up while Rick is already open (microphone unplugged, no
+connection, Gemini overloaded...), it's written in the bar at the bottom of
+the window: once it's sorted, press Alt+R again to retry.
+
+## Installation and setup (Windows, recommended)
+
+You only need [Python](https://www.python.org/downloads/), 3.10 to 3.14
+(if setup asks, check "Add python.exe to PATH").
+
+Once that's done, **double-click `Run Rick.bat`**. On the first start a
+notice shows the link to Python's official site: once it's installed, tick
+"I've downloaded and installed Python" and press OK, and the notice won't
+show again. Then Rick installs everything it needs on its own (creates an
+isolated Python environment inside the `Programma` folder and downloads the
+libraries: takes a few minutes, that's normal) and starts. After that it
+starts right away, without re-checking anything.
+
+The release 1.0.0 zip was checked by 66 antivirus engines on VirusTotal:
+no detections ([see the report](https://www.virustotal.com/gui/file/2a4a1288cc2b2f514c4ca0e279ed0e8a5e2f98f5bba97a956f768c0f93e5a430)).
+
+The libraries installed are always the same versions already tested with
+Rick (listed in `Programma/requirements.txt`), not whatever came out today:
+so a broken or tampered library update never reaches Rick's users on its
+own.
+
+The top-level folder only has what you actually need to use Rick
+(`Run Rick.bat`, `Settings.bat`); everything else (the code, libraries,
+config files) lives inside the `Programma` folder, so the folder doesn't
+look confusing the first time you open it.
+
+The library used for the global shortcut (`Alt+R`) on Windows sometimes
+needs to run **as administrator** to keep working while a game is focused:
+right-click `Run Rick.bat` → "Run as administrator" if the shortcut stops
+responding.
+
+On first launch, if you don't have a key yet, Rick opens a window asking for
+your **language** (Italian/English — changes Rick's prompt, voice, and
+speech recognition) and your Gemini key (with a direct link to create a free
+one in 30 seconds, no credit card needed), then remembers both choices for
+next time — handy if you're sharing the project with someone else: they just
+pick their language and paste their own key the first time they open it.
+
+To change your language or keys **after** the initial setup, double-click
+`Settings.bat`: it reopens the same window pre-filled with what you chose
+before, so you don't have to start from scratch.
+
+The same window also has an **optional** field for a Tavily key: if you
+paste one in, Rick actually searches the web (wikis, up-to-date guides)
+before answering instead of relying only on its base knowledge — much more
+accurate for rare items and specific quests. If you skip this field, Rick
+still works, just a little less precise on niche details. Searches are also
+cached locally: if someone asks the same thing a second time, Rick won't
+search again, saving the free quota.
+
+## Manual installation (Linux/Mac, or to customize)
+
+```bash
+cd Programma
+pip install -r requirements.txt
+cp .env.example .env
+python main.py
+```
+
+Requires Python 3.10+ with Tkinter (on Debian/Ubuntu you may need
+`sudo apt install python3-tk`; already included on Windows and macOS). The
+settings in `.env` already have free defaults:
+
+- **Speech recognition**: uses `faster-whisper` locally, free and offline
+  after the first run (it downloads the model the first time).
+- **Text-to-speech**: uses `edge-tts`, free and keyless (needs an internet
+  connection). If it isn't available, on Windows it uses the voices already
+  installed in the system, offline too.
+
+On Linux, `keyboard` (the global shortcut) reads events from `/dev/input`
+and usually needs the script run with `sudo` (or add your user to the
+`input` group).
+
+## Customization
+
+- Change the shortcut by editing `RICK_HOTKEY` in `.env` (e.g. `ctrl+shift+r`).
+- **Language**: pick Italian/English in the first-run window, or set
+  `RICK_LANGUAGE=it` or `=en` in `.env`. Changes Rick's prompt (answers in
+  that language), the default voice, and the language hint for speech
+  recognition.
+- The default voice is an adult female voice (`it-IT-ElsaNeural` for
+  Italian, `en-US-JennyNeural` for English). The only two free Italian
+  female voices with `edge-tts` are Elsa and `it-IT-IsabellaNeural` (more
+  youthful/childish) — force a different one with `RICK_EDGE_VOICE` in
+  `.env`.
+- Rick's "personality" and instructions live in the system prompt in
+  `Programma/rick/brain.py` (`SYSTEM_PROMPT_IT` / `SYSTEM_PROMPT_EN`), free
+  to edit.
+- The gothic text style (UnifrakturMaguntia font, SIL Open Font License in
+  `Programma/assets/fonts/OFL.txt`) and colors are defined in
+  `Programma/rick/gui.py`. On Windows the font is loaded only for Rick's own
+  session (no installation); if it's unavailable, the window just falls
+  back to the system's default font.
+
+Keys and language are saved in `~/.rick/config.json` (in your user folder,
+outside the project): they never end up on GitHub, and they're not shared if
+you send the folder to someone else. To change them, delete that file and
+Rick will ask for them again next time it starts.
+
+## Making Rick faster (free)
+
+Rick is already tuned for short, fast answers by default, but if you still
+need more speed, these levers are all free:
+
+- **GPU for transcription**: if you have an Nvidia GPU with CUDA/cuDNN
+  installed, set `RICK_WHISPER_DEVICE=cuda` in `.env` — transcription
+  becomes much faster at the same accuracy. If CUDA isn't installed or
+  something goes wrong, Rick notices on its own and falls back to the CPU
+  without breaking.
+- **Turn off web search**: `RICK_ENABLE_WEB_SEARCH=false` in `.env` removes
+  the time spent calling Tavily on every new question (repeated questions
+  stay fast thanks to the cache either way). In exchange, Rick answers only
+  from its general knowledge, without up-to-date guides/wikis.
+- **Smaller transcription model**: `RICK_WHISPER_MODEL_SIZE=base` (instead
+  of `small`) transcribes faster but understands a bit worse — the opposite
+  of `medium`, which is more accurate but slower. Pick whichever you need
+  more.
+- **Less saved history in each question**: by default Rick re-reads the last
+  10 answers it gave for that game. `RICK_MAX_SAVED_HISTORY_ENTRIES=5` (or
+  `=0` to turn this memory off entirely) makes every Gemini request a bit
+  lighter, at the cost of remembering less from past sessions.
+
+## Privacy and data
+
+**Rick has no server and sends no data to its developer.** It runs entirely on
+your PC: the only data that leaves it is described below in "What goes
+online", and it goes straight to the services you use with your own keys.
+
+**What stays on your PC only**, in the `.rick` folder inside your user
+folder:
+
+- your **voice**: it's transcribed locally and never sent online. The
+  recording only exists for the few seconds of the question, then it's
+  deleted (if you close Rick right at that moment, it's deleted on its own
+  at a later start);
+- the **binders** with your history (`history.json`);
+- the **API keys** and language (`config.json`). In the settings window the
+  keys are hidden behind dots, so they don't show if you're streaming or
+  sharing your screen;
+- the web search cache and the error log (`rick.log`, about 3 MB at most).
+  Rick writes neither your keys nor your questions to it.
+
+**What goes online**, and only when you ask a question:
+
+- to **Google Gemini**: the text of your question, the earlier messages of
+  the current chat and, if the chat is named after a game, up to the last
+  10 answers saved for that game;
+- to **Tavily** (only if you added its key): the question with the game's
+  name, for the web search;
+- to **Microsoft**'s speech service (edge-tts): the text of Rick's answer,
+  to read it aloud.
+
+On Gemini's free tier, Google may use the content it receives to improve its
+services; the rules can differ by country: the official ones are in the
+[Gemini API terms](https://ai.google.dev/gemini-api/terms). So **don't tell
+Rick personal information** (names, addresses, passwords...).
+
+Using Gemini and Tavily is governed by their terms of service, which you
+accept when you create the keys, including any requirements such as a
+minimum age: [Gemini API terms](https://ai.google.dev/gemini-api/terms) and
+the terms on [Tavily](https://tavily.com)'s site.
+
+Rick's voice uses, free of charge, the read-aloud service of the Microsoft
+Edge browser, through the open source `edge-tts` library. It isn't an
+official service meant for other programs: it's widely used and tolerated,
+but Microsoft could change or block it at any time. That's why, if that
+service doesn't answer (or you're offline), on Windows Rick switches on its
+own to the **voices already installed in Windows**: they work without
+internet and send nothing anywhere. The voice sounds a bit different, but
+Rick keeps talking; every 10 minutes it tries Microsoft's voice again.
+
+**To delete**: **🗑️ Delete** removes one binder; **Delete all your data**
+erases everything listed above, and next time Rick will ask for your keys
+again. To uninstall Rick completely, press that button first, then delete
+Rick's folder. The only thing left is the transcription model downloaded the
+first time (in `.cache\huggingface` inside your user folder): it holds none
+of your data, but you can delete it to free up space.
+
+**Note: the button only deletes the data on this PC.** Whatever was already
+sent to Google, Tavily and Microsoft (see "What goes online") is kept and
+handled by each platform independently, under its own privacy rules: Rick
+can't delete it. Likewise, your API keys stay valid after you delete them
+from Rick: to really disable them, delete them on the site where you created
+them ([Google AI Studio](https://aistudio.google.com/apikey),
+[Tavily](https://app.tavily.com)).
+
+## Limitations
+
+Rick answers based on its general knowledge of games (Google Gemini) plus,
+if you've set up Tavily, real web search results: it doesn't read your
+screen or access your save file, so for accurate answers it helps to tell it
+the game's name, the chapter/area, and any useful details in your question.
+Gemini's and Tavily's free plans have a daily request limit: for normal
+single-player use you'll almost never hit it (and repeated searches are
+served from the local cache, so they don't count a second time).
+
+## License and contributions
+
+Rick is distributed under the [GPLv3](LICENSE) license: you're free to use,
+modify, and redistribute it, even inside other projects, as long as they
+stay open source under the same license. Contributions, bug reports, and
+feature requests are welcome via GitHub Issues/Pull Requests.
+
+Before proposing a change, run the automated tests from the `Programma`
+folder:
+
+```
+python -m unittest discover -s tests
+```
+
+They need no microphone, speakers, keys or internet (all of that is
+simulated). The window tests need a screen: on a headless Linux machine run
+them with `xvfb-run -a python -m unittest discover -s tests`.
+
+Rick stays free for everyone. If you use it and want to say thanks, you can
+buy me a coffee (entirely optional) at
+[ko-fi.com/rullintello](https://ko-fi.com/rullintello).
+
+---
+
+# Rick — assistente vocale per videogiochi
 
 *[Read this in English](#rick--voice-assistant-for-video-games)*
 
@@ -307,296 +599,4 @@ lanciali con `xvfb-run -a python -m unittest discover -s tests`.
 
 Rick resta gratuito per chiunque. Se lo usi e ti va di ringraziare, puoi
 offrirmi un caffe (del tutto facoltativo) su
-[ko-fi.com/rullintello](https://ko-fi.com/rullintello).
-
----
-
-# Rick — voice assistant for video games
-
-*[Leggi questo in italiano](#rick--assistente-vocale-per-videogiochi)*
-
-Free, open source ([GPLv3](LICENSE) license). If you like Rick and want to
-buy me a coffee (optional): [ko-fi.com/rullintello](https://ko-fi.com/rullintello).
-
-Rick is an assistant that runs in the background while you play. Press
-**Alt+R** to activate the microphone, ask your question ("how do I beat this
-boss?", "where's the legendary sword?", ...) and Rick answers out loud.
-
-## How it works
-
-1. Press `Alt+R` (works even while the game is focused) → you'll hear a
-   **high-pitched beep** and the microphone starts recording.
-2. Press `Alt+R` again → you'll hear a **lower beep** and the recording
-   stops.
-3. Rick transcribes what you said, searches the web (if you've set up
-   search, see below) and asks Google Gemini for an answer tailored to
-   in-game help, then reads it to you out loud.
-
-The two beeps let you know when recording starts/stops even while the game
-is focused: in true exclusive fullscreen, no window (not even Rick's own) is
-visible over the game, so they're the only reliable way to know. If you play
-windowed or borderless fullscreen instead, you can also see Rick's window.
-
-If Rick is still talking and you want to interrupt him with a new question,
-press `Alt+R` again: he stops talking immediately and starts listening right
-away (same high beep as usual), no need to wait for him to finish.
-
-Rick remembers the last few questions/answers of the session, so you only
-need to tell him once which game you're playing and where you are.
-
-## Rick's window
-
-Instead of a black console, Rick looks like a book: on the left, **binders**,
-one per game you've asked about; on the right, the open "page" with that
-binder's conversation.
-
-- Top left is the **"Current game"** field: picking a game you've already
-  used from the dropdown switches to it right away. Typing a new name
-  instead is just a draft until you press **💾 Save**: that renames the open
-  binder (history included) to that name. If a binder with that name
-  already exists, Rick asks first whether to merge the two histories.
-- **🆕 New chat** opens a blank page to start a fresh conversation (Rick
-  forgets the previous one), without deleting the one you were looking at.
-- **🗑️ Delete** permanently removes the open binder (asks for confirmation
-  first).
-- **Delete all your data** (bottom right) erases everything Rick has saved
-  on this PC: binders, keys, cache and error log. It asks first, then Rick
-  closes (see "Privacy and data").
-- Clicking a binder in the list on the left reopens it and makes it the
-  active one, to review past questions or keep asking new ones about that
-  game.
-- Everything is saved automatically on your PC (`~/.rick/history.json`,
-  outside the project, never shared on GitHub): close and reopen Rick
-  whenever you want, the binders are still there.
-
-Rick also re-reads its own past answers for that game (up to 10, the most
-recent) before answering again: if you've asked something similar before,
-maybe in an earlier session, it can answer right away instead of having to
-search everything from scratch - also handy so you don't have to re-explain
-the game and where you are. This doesn't apply to the "Untitled" binder,
-which can mix different games: name the chat with **💾 Save** to turn it on.
-
-If something goes wrong and Rick won't start, since there's no console
-you won't see an error message on screen: instead, a small popup tells you
-where to find the technical details, saved to `~/.rick/rick.log`. If the
-problem comes up while Rick is already open (microphone unplugged, no
-connection, Gemini overloaded...), it's written in the bar at the bottom of
-the window: once it's sorted, press Alt+R again to retry.
-
-## Installation and setup (Windows, recommended)
-
-You only need [Python](https://www.python.org/downloads/), 3.10 to 3.14
-(if setup asks, check "Add python.exe to PATH").
-
-Once that's done, **double-click `Run Rick.bat`**. On the first start a
-notice shows the link to Python's official site: once it's installed, tick
-"I've downloaded and installed Python" and press OK, and the notice won't
-show again. Then Rick installs everything it needs on its own (creates an
-isolated Python environment inside the `Programma` folder and downloads the
-libraries: takes a few minutes, that's normal) and starts. After that it
-starts right away, without re-checking anything.
-
-The release 1.0.0 zip was checked by 66 antivirus engines on VirusTotal:
-no detections ([see the report](https://www.virustotal.com/gui/file/2a4a1288cc2b2f514c4ca0e279ed0e8a5e2f98f5bba97a956f768c0f93e5a430)).
-
-The libraries installed are always the same versions already tested with
-Rick (listed in `Programma/requirements.txt`), not whatever came out today:
-so a broken or tampered library update never reaches Rick's users on its
-own.
-
-The top-level folder only has what you actually need to use Rick
-(`Run Rick.bat`, `Settings.bat`); everything else (the code, libraries,
-config files) lives inside the `Programma` folder, so the folder doesn't
-look confusing the first time you open it.
-
-The library used for the global shortcut (`Alt+R`) on Windows sometimes
-needs to run **as administrator** to keep working while a game is focused:
-right-click `Run Rick.bat` → "Run as administrator" if the shortcut stops
-responding.
-
-On first launch, if you don't have a key yet, Rick opens a window asking for
-your **language** (Italian/English — changes Rick's prompt, voice, and
-speech recognition) and your Gemini key (with a direct link to create a free
-one in 30 seconds, no credit card needed), then remembers both choices for
-next time — handy if you're sharing the project with someone else: they just
-pick their language and paste their own key the first time they open it.
-
-To change your language or keys **after** the initial setup, double-click
-`Settings.bat`: it reopens the same window pre-filled with what you chose
-before, so you don't have to start from scratch.
-
-The same window also has an **optional** field for a Tavily key: if you
-paste one in, Rick actually searches the web (wikis, up-to-date guides)
-before answering instead of relying only on its base knowledge — much more
-accurate for rare items and specific quests. If you skip this field, Rick
-still works, just a little less precise on niche details. Searches are also
-cached locally: if someone asks the same thing a second time, Rick won't
-search again, saving the free quota.
-
-## Manual installation (Linux/Mac, or to customize)
-
-```bash
-cd Programma
-pip install -r requirements.txt
-cp .env.example .env
-python main.py
-```
-
-Requires Python 3.10+ with Tkinter (on Debian/Ubuntu you may need
-`sudo apt install python3-tk`; already included on Windows and macOS). The
-settings in `.env` already have free defaults:
-
-- **Speech recognition**: uses `faster-whisper` locally, free and offline
-  after the first run (it downloads the model the first time).
-- **Text-to-speech**: uses `edge-tts`, free and keyless (needs an internet
-  connection). If it isn't available, on Windows it uses the voices already
-  installed in the system, offline too.
-
-On Linux, `keyboard` (the global shortcut) reads events from `/dev/input`
-and usually needs the script run with `sudo` (or add your user to the
-`input` group).
-
-## Customization
-
-- Change the shortcut by editing `RICK_HOTKEY` in `.env` (e.g. `ctrl+shift+r`).
-- **Language**: pick Italian/English in the first-run window, or set
-  `RICK_LANGUAGE=it` or `=en` in `.env`. Changes Rick's prompt (answers in
-  that language), the default voice, and the language hint for speech
-  recognition.
-- The default voice is an adult female voice (`it-IT-ElsaNeural` for
-  Italian, `en-US-JennyNeural` for English). The only two free Italian
-  female voices with `edge-tts` are Elsa and `it-IT-IsabellaNeural` (more
-  youthful/childish) — force a different one with `RICK_EDGE_VOICE` in
-  `.env`.
-- Rick's "personality" and instructions live in the system prompt in
-  `Programma/rick/brain.py` (`SYSTEM_PROMPT_IT` / `SYSTEM_PROMPT_EN`), free
-  to edit.
-- The gothic text style (UnifrakturMaguntia font, SIL Open Font License in
-  `Programma/assets/fonts/OFL.txt`) and colors are defined in
-  `Programma/rick/gui.py`. On Windows the font is loaded only for Rick's own
-  session (no installation); if it's unavailable, the window just falls
-  back to the system's default font.
-
-Keys and language are saved in `~/.rick/config.json` (in your user folder,
-outside the project): they never end up on GitHub, and they're not shared if
-you send the folder to someone else. To change them, delete that file and
-Rick will ask for them again next time it starts.
-
-## Making Rick faster (free)
-
-Rick is already tuned for short, fast answers by default, but if you still
-need more speed, these levers are all free:
-
-- **GPU for transcription**: if you have an Nvidia GPU with CUDA/cuDNN
-  installed, set `RICK_WHISPER_DEVICE=cuda` in `.env` — transcription
-  becomes much faster at the same accuracy. If CUDA isn't installed or
-  something goes wrong, Rick notices on its own and falls back to the CPU
-  without breaking.
-- **Turn off web search**: `RICK_ENABLE_WEB_SEARCH=false` in `.env` removes
-  the time spent calling Tavily on every new question (repeated questions
-  stay fast thanks to the cache either way). In exchange, Rick answers only
-  from its general knowledge, without up-to-date guides/wikis.
-- **Smaller transcription model**: `RICK_WHISPER_MODEL_SIZE=base` (instead
-  of `small`) transcribes faster but understands a bit worse — the opposite
-  of `medium`, which is more accurate but slower. Pick whichever you need
-  more.
-- **Less saved history in each question**: by default Rick re-reads the last
-  10 answers it gave for that game. `RICK_MAX_SAVED_HISTORY_ENTRIES=5` (or
-  `=0` to turn this memory off entirely) makes every Gemini request a bit
-  lighter, at the cost of remembering less from past sessions.
-
-## Privacy and data
-
-**Rick has no server and sends no data to its developer.** It runs entirely on
-your PC: the only data that leaves it is described below in "What goes
-online", and it goes straight to the services you use with your own keys.
-
-**What stays on your PC only**, in the `.rick` folder inside your user
-folder:
-
-- your **voice**: it's transcribed locally and never sent online. The
-  recording only exists for the few seconds of the question, then it's
-  deleted (if you close Rick right at that moment, it's deleted on its own
-  at a later start);
-- the **binders** with your history (`history.json`);
-- the **API keys** and language (`config.json`). In the settings window the
-  keys are hidden behind dots, so they don't show if you're streaming or
-  sharing your screen;
-- the web search cache and the error log (`rick.log`, about 3 MB at most).
-  Rick writes neither your keys nor your questions to it.
-
-**What goes online**, and only when you ask a question:
-
-- to **Google Gemini**: the text of your question, the earlier messages of
-  the current chat and, if the chat is named after a game, up to the last
-  10 answers saved for that game;
-- to **Tavily** (only if you added its key): the question with the game's
-  name, for the web search;
-- to **Microsoft**'s speech service (edge-tts): the text of Rick's answer,
-  to read it aloud.
-
-On Gemini's free tier, Google may use the content it receives to improve its
-services; the rules can differ by country: the official ones are in the
-[Gemini API terms](https://ai.google.dev/gemini-api/terms). So **don't tell
-Rick personal information** (names, addresses, passwords...).
-
-Using Gemini and Tavily is governed by their terms of service, which you
-accept when you create the keys, including any requirements such as a
-minimum age: [Gemini API terms](https://ai.google.dev/gemini-api/terms) and
-the terms on [Tavily](https://tavily.com)'s site.
-
-Rick's voice uses, free of charge, the read-aloud service of the Microsoft
-Edge browser, through the open source `edge-tts` library. It isn't an
-official service meant for other programs: it's widely used and tolerated,
-but Microsoft could change or block it at any time. That's why, if that
-service doesn't answer (or you're offline), on Windows Rick switches on its
-own to the **voices already installed in Windows**: they work without
-internet and send nothing anywhere. The voice sounds a bit different, but
-Rick keeps talking; every 10 minutes it tries Microsoft's voice again.
-
-**To delete**: **🗑️ Delete** removes one binder; **Delete all your data**
-erases everything listed above, and next time Rick will ask for your keys
-again. To uninstall Rick completely, press that button first, then delete
-Rick's folder. The only thing left is the transcription model downloaded the
-first time (in `.cache\huggingface` inside your user folder): it holds none
-of your data, but you can delete it to free up space.
-
-**Note: the button only deletes the data on this PC.** Whatever was already
-sent to Google, Tavily and Microsoft (see "What goes online") is kept and
-handled by each platform independently, under its own privacy rules: Rick
-can't delete it. Likewise, your API keys stay valid after you delete them
-from Rick: to really disable them, delete them on the site where you created
-them ([Google AI Studio](https://aistudio.google.com/apikey),
-[Tavily](https://app.tavily.com)).
-
-## Limitations
-
-Rick answers based on its general knowledge of games (Google Gemini) plus,
-if you've set up Tavily, real web search results: it doesn't read your
-screen or access your save file, so for accurate answers it helps to tell it
-the game's name, the chapter/area, and any useful details in your question.
-Gemini's and Tavily's free plans have a daily request limit: for normal
-single-player use you'll almost never hit it (and repeated searches are
-served from the local cache, so they don't count a second time).
-
-## License and contributions
-
-Rick is distributed under the [GPLv3](LICENSE) license: you're free to use,
-modify, and redistribute it, even inside other projects, as long as they
-stay open source under the same license. Contributions, bug reports, and
-feature requests are welcome via GitHub Issues/Pull Requests.
-
-Before proposing a change, run the automated tests from the `Programma`
-folder:
-
-```
-python -m unittest discover -s tests
-```
-
-They need no microphone, speakers, keys or internet (all of that is
-simulated). The window tests need a screen: on a headless Linux machine run
-them with `xvfb-run -a python -m unittest discover -s tests`.
-
-Rick stays free for everyone. If you use it and want to say thanks, you can
-buy me a coffee (entirely optional) at
 [ko-fi.com/rullintello](https://ko-fi.com/rullintello).
