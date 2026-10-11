@@ -152,7 +152,8 @@ impostazioni in `.env` hanno gia' dei default gratuiti:
 - **Riconoscimento vocale**: usa `faster-whisper` in locale, gratis e
   offline dopo il primo avvio (scarica il modello la prima volta).
 - **Sintesi vocale**: usa `edge-tts`, gratuito e senza chiave (richiede
-  connessione internet).
+  connessione internet). Se non e' disponibile, su Windows usa le voci gia'
+  installate nel sistema, anche offline.
 
 Su Linux `keyboard` (lo shortcut globale) legge gli eventi da `/dev/input` e
 di norma serve eseguire lo script con `sudo` (oppure aggiungere il proprio
@@ -251,8 +252,11 @@ sul sito di [Tavily](https://tavily.com).
 La voce di Rick usa gratuitamente il servizio di lettura ad alta voce del
 browser Microsoft Edge, tramite la libreria open source `edge-tts`. Non e' un
 servizio ufficiale pensato per altri programmi: e' molto diffuso e tollerato,
-ma Microsoft potrebbe cambiarlo o bloccarlo in qualsiasi momento. In quel caso
-Rick smetterebbe di parlare, ma continuerebbe a scrivere le risposte nel libro.
+ma Microsoft potrebbe cambiarlo o bloccarlo in qualsiasi momento. Per questo,
+se quel servizio non risponde (o sei offline), su Windows Rick passa da solo
+alle **voci gia' installate in Windows**: funzionano senza internet e non
+inviano niente a nessuno. La voce suona un po' diversa, ma Rick continua a
+parlarti; ogni 10 minuti riprova quella di Microsoft.
 
 **Per cancellare**: **🗑️ Elimina** cancella un raccoglitore; **Cancella
 tutti i tuoi dati** cancella tutto quello elencato sopra, e al prossimo
@@ -445,7 +449,8 @@ settings in `.env` already have free defaults:
 - **Speech recognition**: uses `faster-whisper` locally, free and offline
   after the first run (it downloads the model the first time).
 - **Text-to-speech**: uses `edge-tts`, free and keyless (needs an internet
-  connection).
+  connection). If it isn't available, on Windows it uses the voices already
+  installed in the system, offline too.
 
 On Linux, `keyboard` (the global shortcut) reads events from `/dev/input`
 and usually needs the script run with `sudo` (or add your user to the
@@ -543,8 +548,11 @@ the terms on [Tavily](https://tavily.com)'s site.
 Rick's voice uses, free of charge, the read-aloud service of the Microsoft
 Edge browser, through the open source `edge-tts` library. It isn't an
 official service meant for other programs: it's widely used and tolerated,
-but Microsoft could change or block it at any time. If that happened, Rick
-would stop speaking but would keep writing its answers in the book.
+but Microsoft could change or block it at any time. That's why, if that
+service doesn't answer (or you're offline), on Windows Rick switches on its
+own to the **voices already installed in Windows**: they work without
+internet and send nothing anywhere. The voice sounds a bit different, but
+Rick keeps talking; every 10 minutes it tries Microsoft's voice again.
 
 **To delete**: **🗑️ Delete** removes one binder; **Delete all your data**
 erases everything listed above, and next time Rick will ask for your keys
