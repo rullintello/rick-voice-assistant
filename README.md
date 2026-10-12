@@ -6,7 +6,7 @@
   <a href="https://github.com/rullintello/rick-voice-assistant/actions/workflows/tests.yml"><img src="https://github.com/rullintello/rick-voice-assistant/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
   <a href="https://github.com/rullintello/rick-voice-assistant/releases/latest"><img src="https://img.shields.io/github/v/release/rullintello/rick-voice-assistant" alt="release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/rullintello/rick-voice-assistant" alt="license"></a>
-  <a href="https://www.virustotal.com/gui/file/2a4a1288cc2b2f514c4ca0e279ed0e8a5e2f98f5bba97a956f768c0f93e5a430"><img src="https://img.shields.io/badge/VirusTotal-0%2F66%20(v1.0.0)-brightgreen" alt="VirusTotal 0/66"></a>
+  <a href="https://www.virustotal.com/gui/file/67a1dc8a47ded4c7886abb8a588131d3f31440339f1626dc36de4b1da2f7eed9"><img src="https://img.shields.io/badge/VirusTotal-0%2F66%20(v1.0.1)-brightgreen" alt="VirusTotal 0/66"></a>
 </p>
 
 *[Leggi questo in italiano](#rick--assistente-vocale-per-videogiochi)*
@@ -92,8 +92,8 @@ isolated Python environment inside the `Programma` folder and downloads the
 libraries: takes a few minutes, that's normal) and starts. After that it
 starts right away, without re-checking anything.
 
-The release 1.0.0 zip was checked by 66 antivirus engines on VirusTotal:
-no detections ([see the report](https://www.virustotal.com/gui/file/2a4a1288cc2b2f514c4ca0e279ed0e8a5e2f98f5bba97a956f768c0f93e5a430)).
+The release 1.0.1 zip was checked by 66 antivirus engines on VirusTotal:
+no detections ([see the report](https://www.virustotal.com/gui/file/67a1dc8a47ded4c7886abb8a588131d3f31440339f1626dc36de4b1da2f7eed9)).
 
 The libraries installed are always the same versions already tested with
 Rick (listed in `Programma/requirements.txt`), not whatever came out today:
@@ -389,8 +389,8 @@ ambiente Python isolato dentro la cartella `Programma` e scarica le
 librerie: ci mette qualche minuto, e' normale) e si avvia. Le volte
 successive parte subito, senza ricontrollare niente.
 
-Lo zip della release 1.0.0 e' stato controllato da 66 antivirus su
-VirusTotal: nessuna segnalazione ([vedi il risultato](https://www.virustotal.com/gui/file/2a4a1288cc2b2f514c4ca0e279ed0e8a5e2f98f5bba97a956f768c0f93e5a430)).
+Lo zip della release 1.0.1 e' stato controllato da 66 antivirus su
+VirusTotal: nessuna segnalazione ([vedi il risultato](https://www.virustotal.com/gui/file/67a1dc8a47ded4c7886abb8a588131d3f31440339f1626dc36de4b1da2f7eed9)).
 
 Le librerie installate sono sempre le stesse versioni gia' provate con Rick
 (elencate in `Programma/requirements.txt`), non l'ultima uscita del giorno:
