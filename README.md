@@ -17,8 +17,8 @@ buy me a coffee (optional): [ko-fi.com/rullintello](https://ko-fi.com/rullintell
 Rick is an assistant that runs in the background while you play. Press
 **Alt+R** to activate the microphone, ask your question ("how do I beat this
 boss?", "where's the legendary sword?", ...) and Rick answers out loud.
-Alt+R is the default: you can pick other keys in the settings window (see
-"Installation and setup").
+Alt+R is the default: you can pick other keys with the **⌨️ Keys** button in
+Rick's window, or in the settings window.
 
 ## How it works
 
@@ -60,6 +60,8 @@ binder's conversation.
 - **Delete all your data** (bottom right) erases everything Rick has saved
   on this PC: binders, keys, cache and error log. It asks first, then Rick
   closes (see "Privacy and data").
+- **⌨️ Keys** (bottom left) shows the keys that start Rick: click it, press
+  the new keys, then **Save**. They work right away, no restart needed.
 - Clicking a binder in the list on the left reopens it and makes it the
   active one, to review past questions or keep asking new ones about that
   game.
@@ -127,8 +129,9 @@ you chose before, so you don't have to start from scratch.
 press **Change**, then the keys you want, for example `Ctrl+Shift+R` or
 `F9`. A letter or a number needs Ctrl or Alt with it, so Rick doesn't start
 every time you type, and everyday shortcuts like Ctrl+C are refused (the
-window says why). If Rick is already open, close it and open it again to use
-the new keys. Pick keys your game doesn't use: Rick doesn't block them, so
+window says why). Keys changed here are used the next time Rick starts; the
+**⌨️ Keys** button in Rick's window works the same way and applies them right
+away. Pick keys your game doesn't use: Rick doesn't block them, so
 the game receives them too.
 
 The same window also has an **optional** field for a Tavily key: if you
@@ -321,8 +324,8 @@ offrirmi un caffe (facoltativo): [ko-fi.com/rullintello](https://ko-fi.com/rulli
 Rick e' un assistente che gira in background mentre giochi. Premi **Alt+R**
 per attivare il microfono, fai la tua domanda ("come si sconfigge questo
 boss?", "dove trovo la spada leggendaria?", ...) e Rick ti risponde a voce.
-Alt+R e' la combinazione di partenza: puoi sceglierne un'altra nella finestra
-delle impostazioni (vedi "Installazione e avvio").
+Alt+R e' la combinazione di partenza: puoi sceglierne un'altra con il pulsante
+**⌨️ Tasti** nella finestra di Rick, oppure nella finestra delle impostazioni.
 
 ## Come funziona
 
@@ -368,6 +371,9 @@ la "pagina" aperta, con la conversazione di quel raccoglitore.
 - **Cancella tutti i tuoi dati** (in basso a destra) cancella da questo PC
   tutto quello che Rick ha salvato: raccoglitori, chiavi, cache e registro
   errori. Te lo chiede prima, poi Rick si chiude (vedi "Privacy e dati").
+- **⌨️ Tasti** (in basso a sinistra) mostra i tasti che fanno partire Rick:
+  cliccalo, premi i nuovi tasti, poi **Salva**. Funzionano subito, senza
+  riavviare Rick.
 - Cliccando su un raccoglitore nella lista a sinistra lo riapri e lo rendi
   quello attivo, per rivedere le domande passate o continuare a fargliene di
   nuove su quel gioco.
@@ -437,8 +443,9 @@ precompilata con quello che avevi scelto, senza doverlo rifare da zero.
 finestra: premi **Cambia**, poi i tasti che vuoi, per esempio `Ctrl+Shift+R`
 o `F9`. Con una lettera o un numero serve anche Ctrl o Alt, cosi' Rick non
 parte ogni volta che scrivi, e le scorciatoie di tutti i giorni come Ctrl+C
-non sono accettate (la finestra spiega perche'). Se Rick e' gia' aperto,
-chiudilo e riaprilo per usare i nuovi tasti. Scegli tasti che il tuo gioco
+non sono accettate (la finestra spiega perche'). I tasti cambiati qui valgono
+dal prossimo avvio di Rick; il pulsante **⌨️ Tasti** nella finestra di Rick
+funziona allo stesso modo e li applica subito. Scegli tasti che il tuo gioco
 non usa: Rick non li blocca, quindi arrivano anche al gioco.
 
 Nella stessa finestra c'e' anche un campo **facoltativo** per una chiave

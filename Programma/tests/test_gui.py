@@ -6,9 +6,10 @@ without one; on a headless Linux box run the suite under xvfb-run)."""
 import unittest
 from unittest import mock
 
-from rick import config, gui, history
+from rick import config, gui, history, hotkeys
 
 from support import call_on_tk, flush, isolate_rick_home, require_display, run_with_mainloop
+from test_hotkey_picker import press
 
 
 class GuiTestCase(unittest.TestCase):
@@ -21,9 +22,14 @@ class GuiTestCase(unittest.TestCase):
         opened = mock.patch.object(gui.webbrowser, "open")
         self.browser_open = opened.start()
         self.addCleanup(opened.stop)
-        self.book = gui.BookWindow(language=self.language, on_new_chat=self.count_new_chat)
+        self.book = gui.BookWindow(
+            language=self.language, on_new_chat=self.count_new_chat, shortcut=self.make_shortcut()
+        )
         self.addCleanup(self.book.root.destroy)
         self.pump()
+
+    def make_shortcut(self):
+        return None  # no "Keys" button, unless a test class gives one
 
     def count_new_chat(self):
         self.new_chats += 1
@@ -359,6 +365,122 @@ class MissingPortraitTest(GuiTestCase):
         self.assertEqual(packed_images, [])
         self.answer(history.NO_GAME_KEY_IT, "q")
         self.assertIn("q", self.page())
+
+
+class FakeShortcut:
+    """Stands in for app.Shortcut: the keys Rick listens on."""
+
+    def __init__(self, keys="alt+r", locked=False, works=True):
+        self.keys, self.locked, self.works = keys, locked, works
+        self.paused = []
+        self.changes = []
+
+    @property
+    def label(self):
+        return hotkeys.label(self.keys)
+
+    def pause(self, paused):
+        self.paused.append(paused)
+
+    def change(self, keys):
+        self.changes.append(keys)
+        if self.works:
+            self.keys = keys
+        return self.works
+
+
+class KeysButtonTest(GuiTestCase):
+    """The "Keys" button: new keys picked in a small window, in use at once."""
+
+    def make_shortcut(self):
+        self.shortcut = FakeShortcut()
+        return self.shortcut
+
+    def button_text(self):
+        return self.book._keys_button.cget("text")
+
+    def open_dialog(self):
+        self.book._keys_button.invoke()
+        self.pump()
+        return self.book._keys_dialog
+
+    def test_button_shows_the_keys_in_use(self):
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Alt+R")
+
+    def test_picking_and_saving_switches_the_keys(self):
+        dialog = self.open_dialog()
+        self.assertEqual(self.shortcut.paused, [True])  # Alt+R can't start a recording meanwhile
+        self.assertTrue(dialog["picker"].capturing)  # ready for the keys straight away
+        self.assertEqual(dialog["save"].cget("state"), "disabled")
+        press(dialog["picker"], "Control_L", "Shift_L", "F9")
+        self.assertEqual(dialog["save"].cget("state"), "normal")
+        dialog["save"].invoke()
+        self.pump()
+        self.assertEqual(self.shortcut.changes, ["ctrl+shift+f9"])
+        self.assertEqual(self.shortcut.paused, [True, False])
+        self.assertIsNone(self.book._keys_dialog)
+        self.assertFalse(dialog["window"].winfo_exists())
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Ctrl+Shift+F9")
+
+    def test_cancel_changes_nothing(self):
+        dialog = self.open_dialog()
+        press(dialog["picker"], "Alt_L", "k")
+        self.book._close_keys_dialog()  # Annulla, or the window's X
+        self.pump()
+        self.assertEqual(self.shortcut.changes, [])
+        self.assertEqual(self.shortcut.paused, [True, False])
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Alt+R")
+
+    def test_keys_this_pc_refuses_are_explained_and_the_old_ones_kept(self):
+        self.shortcut.works = False
+        dialog = self.open_dialog()
+        press(dialog["picker"], "Alt_L", "k")
+        dialog["save"].invoke()
+        self.pump()
+        self.assertIn("Alt+R", dialog["problem"].cget("text"))
+        self.assertTrue(dialog["window"].winfo_exists())  # still open, to try other keys
+        self.assertEqual(self.shortcut.paused, [True])
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Alt+R")
+        self.book._close_keys_dialog()
+        self.assertEqual(self.shortcut.paused, [True, False])
+
+    def test_a_second_click_brings_back_the_same_window(self):
+        first = self.open_dialog()
+        self.assertIs(self.open_dialog(), first)
+        self.assertEqual(self.shortcut.paused, [True])
+
+    def test_shown_after_app_falls_back_to_alt_r(self):
+        self.shortcut.keys = "f9"
+        self.book.show_shortcut()  # thread-safe
+        self.pump()
+        self.assertEqual(self.button_text(), "⌨️ Tasti: F9")
+
+    def test_closing_twice_is_harmless(self):
+        self.book._keys_button.invoke()
+        self.pump()
+        self.book._close_keys_dialog()
+        self.book._close_keys_dialog()  # twice: harmless
+        self.assertEqual(self.shortcut.paused, [True, False])
+
+
+class LockedKeysButtonTest(GuiTestCase):
+    def make_shortcut(self):
+        self.shortcut = FakeShortcut("ctrl+shift+r", locked=True)
+        return self.shortcut
+
+    def test_keys_from_env_can_be_seen_but_not_changed(self):
+        self.book._keys_button.invoke()
+        self.pump()
+        dialog = self.book._keys_dialog
+        self.assertFalse(dialog["picker"].capturing)
+        self.assertEqual(dialog["save"].winfo_manager(), "")  # no Save button at all
+        self.book._close_keys_dialog()
+        self.assertEqual(self.shortcut.changes, [])
+
+
+class NoShortcutTest(GuiTestCase):
+    def test_no_keys_button_without_a_shortcut(self):
+        self.assertIsNone(self.book._keys_button)
 
 
 if __name__ == "__main__":

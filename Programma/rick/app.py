@@ -67,25 +67,90 @@ def ensure_api_keys() -> None:
         config.save_hotkey(keys["hotkey"])
 
 
+class Shortcut:
+    """The keys that start/stop listening (Alt+R unless the player picked
+    others): registered with keyboard by start(), and changeable while Rick
+    runs, from the "Keys" button of the window (see gui.py)."""
+
+    def __init__(self):
+        self.keys = config.get_hotkey()
+        self.locked = config.hotkey_set_in_env()
+        self.on_changed = None  # called after change() switched the keys
+        self._on_press = None
+        self._remove = None
+        self._paused = threading.Event()
+
+    @property
+    def label(self) -> str:
+        """How the window and the status bar name the keys, e.g. "Alt+R"."""
+        return hotkeys.label(self.keys)
+
+    def start(self, on_press) -> None:
+        self._on_press = on_press
+        try:
+            self._remove = self._register(self.keys)
+        except ValueError:
+            # a name keyboard doesn't know (typed by hand as RICK_HOTKEY in
+            # .env): Rick still starts, on Alt+R, and the status bar says so
+            logging.exception("Can't use %r as the shortcut, using %s", self.keys, hotkeys.DEFAULT)
+            self.keys = hotkeys.DEFAULT
+            self._remove = self._register(self.keys)
+
+    def _register(self, keys: str):
+        # a new function each time: keyboard files its hotkeys by callback
+        # too, so sharing one between the old and new keys would mix them up
+        return keyboard.add_hotkey(keys, lambda: self._pressed())
+
+    def _pressed(self) -> None:
+        if not self._paused.is_set():
+            self._on_press()
+
+    def pause(self, paused: bool) -> None:
+        """While the player is picking new keys, pressing the current ones
+        must not start a recording."""
+        if paused:
+            self._paused.set()
+        else:
+            self._paused.clear()
+
+    def change(self, keys: str) -> bool:
+        """Switches to `keys` (accepted by hotkeys.parse) and saves them.
+        The new keys are registered before the old ones are removed, so if
+        keyboard refuses them Rick keeps working on the old ones (-> False)."""
+        keys = hotkeys.parse(keys)
+        if keys != self.keys:
+            try:
+                remove_new = self._register(keys)
+            except ValueError:
+                logging.exception("Can't use %r as the shortcut, keeping %s", keys, self.keys)
+                return False
+            remove_old, self._remove, self.keys = self._remove, remove_new, keys
+            try:
+                remove_old()
+            except Exception:  # the new keys work: not worth failing over
+                logging.exception("Couldn't remove the old shortcut")
+        config.save_hotkey(keys)
+        if self.on_changed:
+            self.on_changed()
+        return True
+
+
 def main() -> None:
     userdata.purge_leftover_temp_files()
     ensure_api_keys()
 
     rick = Rick()
     recorder = Recorder()
+    shortcut = Shortcut()
     book = BookWindow(
         language=config.get_language(),
         on_close=lambda: os._exit(0),
         on_new_chat=rick.reset_conversation,
+        shortcut=shortcut,
     )
 
-    # the keys picked in the settings (Alt+R unless changed), and how the
-    # status bar names them; both change if keyboard can't use them, below
-    hotkey = config.get_hotkey()
-    key_label = hotkeys.label(hotkey)
-
     def ready_status() -> str:
-        return _t("status_ready", hotkey=key_label)
+        return _t("status_ready", hotkey=shortcut.label)
 
     # stage: "idle" -> "recording" -> "thinking" -> "speaking" -> "idle"
     # (o "speaking" -> "recording" direttamente, se interrotto con Alt+R).
@@ -101,7 +166,7 @@ def main() -> None:
         recorder.start()  # se fallisce (niente microfono) lo stage non cambia
         state["turn"] += 1
         state["stage"] = "recording"
-        book.set_status(_t("status_recording", hotkey=key_label))
+        book.set_status(_t("status_recording", hotkey=shortcut.label))
 
     def show_status(turn: int, text: str) -> None:
         with lock:
@@ -164,7 +229,7 @@ def main() -> None:
             logging.exception("Error handling a turn")
             # stays in the status bar after the spoken apology, until the
             # next Alt+R, so what went wrong can actually be read
-            final_status = _error_status(exc, key_label)
+            final_status = _error_status(exc, shortcut.label)
             show_status(turn, final_status)
             try:
                 speak(_t("error_speech"), turn)
@@ -200,22 +265,24 @@ def main() -> None:
             try:
                 handle_hotkey()
             except Exception as exc:
-                logging.exception("Error handling %s", hotkey)
+                logging.exception("Error handling %s", shortcut.keys)
                 if state["stage"] == "speaking":
                     # interrotto ma la nuova registrazione non e' partita:
                     # il turno finisce qui, e il thread della risposta non
                     # deve rimettere "pronto" sopra all'errore
                     state["turn"] += 1
                     state["stage"] = "idle"
-                book.set_status(_error_status(exc, key_label))
+                book.set_status(_error_status(exc, shortcut.label))
 
-    try:
-        keyboard.add_hotkey(hotkey, on_hotkey)
-    except ValueError:
-        # a name keyboard doesn't know (typed by hand as RICK_HOTKEY in .env):
-        # Rick still starts, on Alt+R, and the status bar says which keys
-        logging.exception("Can't use %r as the shortcut, using %s", hotkey, hotkeys.DEFAULT)
-        hotkey, key_label = hotkeys.DEFAULT, hotkeys.label(hotkeys.DEFAULT)
-        keyboard.add_hotkey(hotkey, on_hotkey)
+    def show_new_keys() -> None:
+        # the "ready" line names the keys: refresh it, unless a question is
+        # under way (its own status comes back to "ready" when it's done)
+        with lock:
+            if state["stage"] == "idle":
+                book.set_status(ready_status())
+
+    shortcut.start(on_hotkey)
+    shortcut.on_changed = show_new_keys
+    book.show_shortcut()  # start() may have fallen back to Alt+R
     book.set_status(ready_status())
     book.run()

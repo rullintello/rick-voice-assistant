@@ -6,9 +6,10 @@ import tkinter as tk
 import unittest
 from unittest import mock
 
-from rick import setup_gui
+from rick import hotkey_picker, setup_gui
 
 from support import require_display
+from test_hotkey_picker import press
 
 
 def widgets(root, cls):
@@ -115,133 +116,78 @@ class SetupDialogTest(DialogTestCase):
 
 
 class ShortcutPickerTest(DialogTestCase):
-    """The "Change" button: press it, then the keys you want."""
+    """The keys row of the dialog (rick/hotkey_picker.py, tested in depth in
+    test_hotkey_picker.py): what it starts from and what the dialog returns."""
 
     PREFILL = {"gemini": "gem-123", "language": "it"}
 
-    HINTS = ("hotkey_note", "hotkey_capturing", "hotkey_locked",
-             "hotkey_error_key", "hotkey_error_modifier", "hotkey_error_reserved")
+    def setUp(self):
+        super().setUp()
+        self.pickers = []
+        test = self
 
-    def keys_shown(self, root):
-        """The text of the box showing the keys (the only framed label)."""
-        return next(l for l in widgets(root, tk.Label) if l.cget("relief") == "groove").cget("text")
+        class RecordedPicker(hotkey_picker.HotkeyPicker):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                test.pickers.append(self)
 
-    def hint(self, root):
-        hints = {strings[k] for strings in setup_gui.DIALOG_STRINGS.values() for k in self.HINTS}
-        return next(l for l in widgets(root, tk.Label) if l.cget("text") in hints)
-
-    def bring_to_front(self, root, widget=None):
-        """Tk only delivers keys to a window that has the keyboard focus. A
-        machine may refuse to hand it over (Windows can keep a background
-        process from taking the foreground): then these tests can't press
-        keys there, so they're skipped rather than reported as failures."""
-        (widget or root).focus_force()
-        root.update()
-        if root.focus_get() is None:
-            self.skipTest("this machine won't give the test window the keyboard focus")
-
-    def press(self, root, *keysyms):
-        """Presses (and keeps down) each key, then releases them all, in the
-        widget that has the focus - as a player would."""
-        target = root.focus_get()
-        self.assertIsNotNone(target, "nothing is waiting for the keys")
-        for keysym in keysyms:
-            target.event_generate("<KeyPress>", keysym=keysym)
-        for keysym in reversed(keysyms):
-            target.event_generate("<KeyRelease>", keysym=keysym)
-        root.update()
-
-    def change(self, root):
-        self.bring_to_front(root)  # as when the player clicks on the window
-        self.button(root, "hotkey_change").invoke()
-        root.update()
+        patcher = mock.patch.object(setup_gui, "HotkeyPicker", RecordedPicker)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_alt_r_is_shown_and_kept_by_default(self):
         seen = {}
 
         def driver(root):
-            seen["keys"] = self.keys_shown(root)
+            seen["keys"] = self.pickers[0].box.cget("text")
             self.save(root)
 
         result = self.run_dialog(driver, prefill=self.PREFILL)
         self.assertEqual(seen["keys"], "Alt+R")
         self.assertEqual(result["hotkey"], "alt+r")
 
-    def test_pressing_new_keys_picks_them(self):
-        seen = {}
-
+    def test_picked_keys_are_returned(self):
         def driver(root):
-            self.change(root)
-            seen["waiting"] = self.keys_shown(root)
-            self.press(root, "Control_L", "Shift_L", "F9")
-            seen["picked"] = self.keys_shown(root)
+            picker = self.pickers[0]
+            picker.button.invoke()
+            press(picker, "Control_L", "Shift_L", "F9")
             self.save(root)
 
         result = self.run_dialog(driver, prefill=self.PREFILL)
-        self.assertEqual(seen["waiting"], setup_gui.DIALOG_STRINGS["it"]["hotkey_waiting"])
-        self.assertEqual(seen["picked"], "Ctrl+Shift+F9")
         self.assertEqual(result["hotkey"], "ctrl+shift+f9")
 
-    def test_refused_keys_explain_why_and_keep_waiting(self):
-        seen = {}
-        strings = setup_gui.DIALOG_STRINGS["it"]
-
+    def test_saving_while_still_waiting_keeps_the_old_keys(self):
         def driver(root):
-            self.change(root)
-            self.press(root, "r")  # a bare letter: would fire while typing
-            seen["no_modifier"] = self.hint(root).cget("text")
-            self.press(root, "Control_L", "c")  # copy
-            seen["reserved"] = self.hint(root).cget("text")
-            self.press(root, "Alt_L", "space")
-            seen["bad_key"] = self.hint(root).cget("text")
-            seen["still_waiting"] = self.keys_shown(root)
-            self.press(root, "Alt_L", "k")
-            self.save(root)
-
-        result = self.run_dialog(driver, prefill=self.PREFILL)
-        self.assertEqual(seen["no_modifier"], strings["hotkey_error_modifier"])
-        self.assertEqual(seen["reserved"], strings["hotkey_error_reserved"])
-        self.assertEqual(seen["bad_key"], strings["hotkey_error_key"])
-        self.assertEqual(seen["still_waiting"], strings["hotkey_waiting"])
-        self.assertEqual(result["hotkey"], "alt+k")
-
-    def test_escape_keeps_the_old_keys(self):
-        seen = {}
-
-        def driver(root):
-            self.change(root)
-            self.press(root, "Escape")
-            seen["keys"] = self.keys_shown(root)
-            self.press(root, "Alt_L", "k")  # no longer listening
+            self.pickers[0].button.invoke()
             self.save(root)
 
         result = self.run_dialog(driver, prefill=dict(self.PREFILL, hotkey="ctrl+shift+r"))
-        self.assertEqual(seen["keys"], "Ctrl+Shift+R")
         self.assertEqual(result["hotkey"], "ctrl+shift+r")
 
-    def test_typing_in_the_key_fields_never_changes_the_shortcut(self):
-        def driver(root):
-            gemini, _tavily = widgets(root, tk.Entry)
-            self.bring_to_front(root, gemini)
-            self.press(root, "Alt_L", "k")
-            self.save(root)
+    def test_the_row_follows_the_language(self):
+        seen = {}
 
-        result = self.run_dialog(driver, prefill=self.PREFILL)
-        self.assertEqual(result["hotkey"], "alt+r")
+        def driver(root):
+            _it, en_button = widgets(root, tk.Radiobutton)
+            en_button.invoke()
+            seen["button"] = self.pickers[0].button.cget("text")
+            root.destroy()
+
+        self.run_dialog(driver, prefill=self.PREFILL)
+        self.assertEqual(seen["button"], hotkey_picker.STRINGS["en"]["change"])
 
     def test_keys_set_in_env_are_shown_but_locked(self):
         seen = {}
 
         def driver(root):
-            seen["keys"] = self.keys_shown(root)
-            seen["button"] = self.button(root, "hotkey_change").cget("state")
-            seen["hint"] = self.hint(root).cget("text")
+            picker = self.pickers[0]
+            seen["keys"] = picker.box.cget("text")
+            seen["button"] = picker.button.cget("state")
             self.save(root)
 
         result = self.run_dialog(driver, prefill=dict(self.PREFILL, hotkey="ctrl+shift+r", hotkey_locked=True))
         self.assertEqual(seen["keys"], "Ctrl+Shift+R")
         self.assertEqual(seen["button"], "disabled")
-        self.assertEqual(seen["hint"], setup_gui.DIALOG_STRINGS["it"]["hotkey_locked"])
         self.assertIsNone(result["hotkey"])  # nothing to save: .env decides
 
 

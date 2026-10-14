@@ -21,9 +21,11 @@ ANSWER = "Lo trovi nella palude a nord del castello."
 class FakeBook:
     """Stands in for gui.BookWindow: same thread-safe API, no Tk."""
 
-    def __init__(self, language, on_close=None, on_new_chat=None):
+    def __init__(self, language, on_close=None, on_new_chat=None, shortcut=None):
         self.language = language
         self.on_new_chat = on_new_chat
+        self.shortcut = shortcut  # app.Shortcut: the window's "Keys" button drives it
+        self.shortcut_shown = 0
         self.game = "Elden Ring"
         self.statuses = []
         self.turns = []
@@ -44,6 +46,9 @@ class FakeBook:
     def append_turn(self, game, question, answer):
         with self._lock:
             self.turns.append((game, question, answer))
+
+    def show_shortcut(self):
+        self.shortcut_shown += 1
 
     def run(self):
         pass  # the real one blocks in Tk's mainloop; the test drives instead
@@ -128,7 +133,10 @@ class FakeSpeaker:
         self._stop.set()
 
 
-class AppTest(unittest.TestCase):
+class AppHarness(unittest.TestCase):
+    """Starts app.main() with every outside piece faked (see the module
+    docstring); the test classes below drive it."""
+
     # the keys Rick should end up listening on, and how the status bar names them
     hotkey, key_label = "alt+r", "Alt+R"
 
@@ -148,12 +156,16 @@ class AppTest(unittest.TestCase):
         self.hotkey_attempts = []
         self.workers = []
 
+        self.unknown_to_keyboard = {"ctrl+nosuchkey"}
+
         def add_hotkey(key, callback):
-            # like keyboard: a key name it doesn't know fails at registration
+            # like keyboard: a key name it doesn't know fails at registration,
+            # and what comes back removes the hotkey
             self.hotkey_attempts.append(key)
-            if "nosuchkey" in key:
+            if key in self.unknown_to_keyboard:
                 raise ValueError(f"Key {key!r} is not mapped to any known key.")
             self.registered[key] = callback
+            return lambda: self.registered.pop(key)
 
         def worker_thread(*args, **kwargs):
             thread = threading.Thread(*args, **kwargs)
@@ -162,7 +174,7 @@ class AppTest(unittest.TestCase):
 
         patches = {
             "keyboard": mock.Mock(add_hotkey=add_hotkey),
-            "threading": types.SimpleNamespace(Thread=worker_thread, Lock=threading.Lock),
+            "threading": types.SimpleNamespace(Thread=worker_thread, Lock=threading.Lock, Event=threading.Event),
             "Recorder": lambda: self.recorder,
             "Rick": lambda: self.rick,
             "transcribe": lambda path: self.question,
@@ -208,6 +220,9 @@ class AppTest(unittest.TestCase):
         for path in self.recorder.wav_files + self.speaker.mp3_files:
             self.assertFalse(os.path.exists(path), path)
 
+
+
+class AppTest(AppHarness):
     # -- the happy path ----------------------------------------------------
     def test_a_normal_turn(self):
         self.assertEqual(self.book.status, self.ready())
@@ -346,6 +361,50 @@ class UnknownShortcutInEnvTest(AppTest):
     def test_falls_back_to_alt_r(self):
         self.assertEqual(self.hotkey_attempts, ["ctrl+nosuchkey", "alt+r"])
         self.assertEqual(self.book.status, self.ready())
+
+
+class ChangeKeysWhileRunningTest(AppHarness):
+    """The window's "Keys" button (gui.py) calls app.Shortcut: new keys work
+    right away, without restarting Rick."""
+
+    def change(self, keys):
+        return self.book.shortcut.change(keys)
+
+    def test_new_keys_work_at_once_and_the_old_ones_stop(self):
+        self.assertTrue(self.change("Ctrl+K"))
+        self.assertEqual(list(self.registered), ["ctrl+k"])  # Alt+R removed
+        self.assertEqual(config.get_hotkey(), "ctrl+k")  # still there after a restart
+        self.assertEqual(self.book.status, app._t("status_ready", hotkey="Ctrl+K"))
+        self.registered["ctrl+k"]()  # idle -> recording, on the new keys
+        self.assertEqual(self.book.status, app._t("status_recording", hotkey="Ctrl+K"))
+
+    def test_keys_keyboard_refuses_leave_the_old_ones_working(self):
+        self.unknown_to_keyboard.add("ctrl+f12")
+        self.assertFalse(self.change("ctrl+f12"))
+        self.assertEqual(list(self.registered), ["alt+r"])
+        self.assertEqual(config.get_hotkey(), "alt+r")
+        self.ask_one_question()
+        self.wait_for_status(self.ready())
+
+    def test_current_keys_do_nothing_while_new_ones_are_picked(self):
+        self.book.shortcut.pause(True)  # the "Keys" window is open
+        self.press()
+        self.assertEqual(self.recorder.starts, 0)
+        self.book.shortcut.pause(False)
+        self.press()
+        self.assertEqual(self.book.status, self.recording())
+
+    def test_a_question_under_way_keeps_its_status(self):
+        self.press()  # recording
+        self.assertTrue(self.change("ctrl+k"))
+        self.assertEqual(self.book.status, self.recording())  # not "ready"
+        self.registered["ctrl+k"]()  # recording -> thinking, on the new keys
+        self.wait_for_status(app._t("status_ready", hotkey="Ctrl+K"))
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, ANSWER)])
+
+    def test_the_window_shows_the_keys_after_a_fallback(self):
+        self.assertEqual(self.book.shortcut_shown, 1)
+        self.assertEqual(self.book.shortcut.label, "Alt+R")
 
 
 if __name__ == "__main__":
