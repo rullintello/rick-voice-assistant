@@ -45,7 +45,7 @@ def isolate_rick_home(test: unittest.TestCase) -> Path:
     test.addCleanup(log_file.stop)
     env = mock.patch.dict(
         os.environ,
-        {"GEMINI_API_KEY": "test-key", "RICK_LANGUAGE": "it", "TAVILY_API_KEY": ""},
+        {"GEMINI_API_KEY": "test-key", "RICK_LANGUAGE": "it", "TAVILY_API_KEY": "", "RICK_HOTKEY": ""},
     )
     env.start()
     test.addCleanup(env.stop)

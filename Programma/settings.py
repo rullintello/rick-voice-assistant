@@ -7,10 +7,12 @@ _MESSAGES = {
     "it": {
         "cancelled": "Nessuna modifica salvata (serve comunque una chiave Gemini).",
         "saved": "Impostazioni salvate.",
+        "restart": "Se Rick e' gia' aperto, chiudilo e riaprilo per usare i nuovi tasti ({keys}).",
     },
     "en": {
         "cancelled": "No changes saved (a Gemini key is still required).",
         "saved": "Settings saved.",
+        "restart": "If Rick is already open, close it and open it again to use the new keys ({keys}).",
     },
 }
 
@@ -27,13 +29,16 @@ def _notify(text: str) -> None:
 def main() -> None:
     # Imported here, not at the top, so a failure (e.g. a malformed .env)
     # is caught by run() and shown, instead of silently killing pythonw.
-    from rick import config
+    from rick import config, hotkeys
     from rick.setup_gui import ask_for_api_keys
 
+    old_hotkey = config.get_hotkey()
     prefill = {
         "gemini": config.get_gemini_api_key(),
         "tavily": config.get_tavily_api_key(),
         "language": config.get_language(),
+        "hotkey": old_hotkey,
+        "hotkey_locked": config.hotkey_set_in_env(),
     }
     keys = ask_for_api_keys(prefill=prefill, title="Rick - impostazioni")
     language = keys.get("language", "it")
@@ -44,7 +49,14 @@ def main() -> None:
     config.save_gemini_api_key(keys["gemini"])
     config.save_tavily_api_key(keys["tavily"])
     config.save_language(language)
-    _notify(_MESSAGES[language]["saved"])
+    message = _MESSAGES[language]["saved"]
+    # A running Rick registered its keys when it started: say so, rather
+    # than leave the player pressing new keys that don't work yet.
+    if keys.get("hotkey"):  # None when .env decides the keys
+        config.save_hotkey(keys["hotkey"])
+        if keys["hotkey"] != old_hotkey:
+            message += "\n\n" + _MESSAGES[language]["restart"].format(keys=hotkeys.label(keys["hotkey"]))
+    _notify(message)
 
 
 if __name__ == "__main__":

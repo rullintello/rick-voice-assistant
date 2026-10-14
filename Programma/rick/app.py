@@ -4,7 +4,7 @@ import threading
 
 import keyboard
 
-from . import config, userdata
+from . import config, hotkeys, userdata
 from .audio import Recorder, arm_playback, chime_start, chime_stop, interrupt_playback, play_audio
 from .brain import Rick
 from .gui import BookWindow
@@ -43,8 +43,8 @@ def _t(key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
-def _error_status(exc: BaseException) -> str:
-    return _t("status_error", error=describe_error(exc), hotkey=config.HOTKEY)
+def _error_status(exc: BaseException, key_label: str) -> str:
+    return _t("status_error", error=describe_error(exc), hotkey=key_label)
 
 
 def ensure_api_keys() -> None:
@@ -53,7 +53,9 @@ def ensure_api_keys() -> None:
 
     from .setup_gui import ask_for_api_keys
 
-    keys = ask_for_api_keys()
+    keys = ask_for_api_keys(
+        prefill={"hotkey": config.get_hotkey(), "hotkey_locked": config.hotkey_set_in_env()}
+    )
     if not keys["gemini"]:
         show_error_dialog("Rick", STRINGS[keys.get("language", "it")]["need_gemini_key"])
         raise SystemExit(0)
@@ -61,6 +63,8 @@ def ensure_api_keys() -> None:
     if keys["tavily"]:
         config.save_tavily_api_key(keys["tavily"])
     config.save_language(keys.get("language", "it"))
+    if keys.get("hotkey"):
+        config.save_hotkey(keys["hotkey"])
 
 
 def main() -> None:
@@ -75,8 +79,13 @@ def main() -> None:
         on_new_chat=rick.reset_conversation,
     )
 
+    # the keys picked in the settings (Alt+R unless changed), and how the
+    # status bar names them; both change if keyboard can't use them, below
+    hotkey = config.get_hotkey()
+    key_label = hotkeys.label(hotkey)
+
     def ready_status() -> str:
-        return _t("status_ready", hotkey=config.HOTKEY)
+        return _t("status_ready", hotkey=key_label)
 
     # stage: "idle" -> "recording" -> "thinking" -> "speaking" -> "idle"
     # (o "speaking" -> "recording" direttamente, se interrotto con Alt+R).
@@ -92,7 +101,7 @@ def main() -> None:
         recorder.start()  # se fallisce (niente microfono) lo stage non cambia
         state["turn"] += 1
         state["stage"] = "recording"
-        book.set_status(_t("status_recording", hotkey=config.HOTKEY))
+        book.set_status(_t("status_recording", hotkey=key_label))
 
     def show_status(turn: int, text: str) -> None:
         with lock:
@@ -155,7 +164,7 @@ def main() -> None:
             logging.exception("Error handling a turn")
             # stays in the status bar after the spoken apology, until the
             # next Alt+R, so what went wrong can actually be read
-            final_status = _error_status(exc)
+            final_status = _error_status(exc, key_label)
             show_status(turn, final_status)
             try:
                 speak(_t("error_speech"), turn)
@@ -191,15 +200,22 @@ def main() -> None:
             try:
                 handle_hotkey()
             except Exception as exc:
-                logging.exception("Error handling %s", config.HOTKEY)
+                logging.exception("Error handling %s", hotkey)
                 if state["stage"] == "speaking":
                     # interrotto ma la nuova registrazione non e' partita:
                     # il turno finisce qui, e il thread della risposta non
                     # deve rimettere "pronto" sopra all'errore
                     state["turn"] += 1
                     state["stage"] = "idle"
-                book.set_status(_error_status(exc))
+                book.set_status(_error_status(exc, key_label))
 
-    keyboard.add_hotkey(config.HOTKEY, on_hotkey)
+    try:
+        keyboard.add_hotkey(hotkey, on_hotkey)
+    except ValueError:
+        # a name keyboard doesn't know (typed by hand as RICK_HOTKEY in .env):
+        # Rick still starts, on Alt+R, and the status bar says which keys
+        logging.exception("Can't use %r as the shortcut, using %s", hotkey, hotkeys.DEFAULT)
+        hotkey, key_label = hotkeys.DEFAULT, hotkeys.label(hotkeys.DEFAULT)
+        keyboard.add_hotkey(hotkey, on_hotkey)
     book.set_status(ready_status())
     book.run()

@@ -17,6 +17,8 @@ buy me a coffee (optional): [ko-fi.com/rullintello](https://ko-fi.com/rullintell
 Rick is an assistant that runs in the background while you play. Press
 **Alt+R** to activate the microphone, ask your question ("how do I beat this
 boss?", "where's the legendary sword?", ...) and Rick answers out loud.
+Alt+R is the default: you can pick other keys in the settings window (see
+"Installation and setup").
 
 ## How it works
 
@@ -105,7 +107,7 @@ The top-level folder only has what you actually need to use Rick
 config files) lives inside the `Programma` folder, so the folder doesn't
 look confusing the first time you open it.
 
-The library used for the global shortcut (`Alt+R`) on Windows sometimes
+The library used for the global shortcut (`Alt+R` by default) on Windows sometimes
 needs to run **as administrator** to keep working while a game is focused:
 right-click `Run Rick.bat` → "Run as administrator" if the shortcut stops
 responding.
@@ -117,9 +119,17 @@ one in 30 seconds, no credit card needed), then remembers both choices for
 next time — handy if you're sharing the project with someone else: they just
 pick their language and paste their own key the first time they open it.
 
-To change your language or keys **after** the initial setup, double-click
-`Settings.bat`: it reopens the same window pre-filled with what you chose
-before, so you don't have to start from scratch.
+To change your language, keys or shortcut **after** the initial setup,
+double-click `Settings.bat`: it reopens the same window pre-filled with what
+you chose before, so you don't have to start from scratch.
+
+**The keys that start Rick** (Alt+R by default) are in the same window:
+press **Change**, then the keys you want, for example `Ctrl+Shift+R` or
+`F9`. A letter or a number needs Ctrl or Alt with it, so Rick doesn't start
+every time you type, and everyday shortcuts like Ctrl+C are refused (the
+window says why). If Rick is already open, close it and open it again to use
+the new keys. Pick keys your game doesn't use: Rick doesn't block them, so
+the game receives them too.
 
 The same window also has an **optional** field for a Tavily key: if you
 paste one in, Rick actually searches the web (wikis, up-to-date guides)
@@ -154,7 +164,9 @@ and usually needs the script run with `sudo` (or add your user to the
 
 ## Customization
 
-- Change the shortcut by editing `RICK_HOTKEY` in `.env` (e.g. `ctrl+shift+r`).
+- The shortcut is easiest to change from `Settings.bat` (see above).
+  `RICK_HOTKEY` in `.env` (e.g. `ctrl+shift+r`) takes priority over that
+  choice, and also accepts any other key name the `keyboard` library knows.
 - **Language**: pick Italian/English in the first-run window, or set
   `RICK_LANGUAGE=it` or `=en` in `.env`. Changes Rick's prompt (answers in
   that language), the default voice, and the language hint for speech
@@ -309,6 +321,8 @@ offrirmi un caffe (facoltativo): [ko-fi.com/rullintello](https://ko-fi.com/rulli
 Rick e' un assistente che gira in background mentre giochi. Premi **Alt+R**
 per attivare il microfono, fai la tua domanda ("come si sconfigge questo
 boss?", "dove trovo la spada leggendaria?", ...) e Rick ti risponde a voce.
+Alt+R e' la combinazione di partenza: puoi sceglierne un'altra nella finestra
+delle impostazioni (vedi "Installazione e avvio").
 
 ## Come funziona
 
@@ -402,7 +416,7 @@ Nella cartella principale trovi solo quello che serve per usare Rick
 file di configurazione) e' dentro la cartella `Programma`, per non creare
 confusione a chi apre la cartella per la prima volta.
 
-Il modulo usato per lo shortcut globale (`Alt+R`) su Windows a volte richiede
+Il modulo usato per lo shortcut globale (`Alt+R` di partenza) su Windows a volte richiede
 di eseguire il file **come amministratore** per funzionare anche quando un
 gioco e' in primo piano: tasto destro su `Run Rick.bat` → "Esegui come
 amministratore" se lo shortcut non risponde.
@@ -415,9 +429,17 @@ entrambe le scelte per le volte dopo — utile se passi il progetto a
 qualcun altro: gli basta scegliere la sua lingua e incollare la sua chiave
 alla prima apertura.
 
-Per cambiare lingua o chiavi **dopo** la prima configurazione, fai doppio
-click su `Settings.bat`: riapre la stessa finestra gia' precompilata con
-quello che avevi scelto, senza doverlo rifare da zero.
+Per cambiare lingua, chiavi o scorciatoia **dopo** la prima configurazione,
+fai doppio click su `Settings.bat`: riapre la stessa finestra gia'
+precompilata con quello che avevi scelto, senza doverlo rifare da zero.
+
+**I tasti che fanno partire Rick** (Alt+R di partenza) sono nella stessa
+finestra: premi **Cambia**, poi i tasti che vuoi, per esempio `Ctrl+Shift+R`
+o `F9`. Con una lettera o un numero serve anche Ctrl o Alt, cosi' Rick non
+parte ogni volta che scrivi, e le scorciatoie di tutti i giorni come Ctrl+C
+non sono accettate (la finestra spiega perche'). Se Rick e' gia' aperto,
+chiudilo e riaprilo per usare i nuovi tasti. Scegli tasti che il tuo gioco
+non usa: Rick non li blocca, quindi arrivano anche al gioco.
 
 Nella stessa finestra c'e' anche un campo **facoltativo** per una chiave
 Tavily: se la incolli, Rick cerca davvero sul web (wiki, guide aggiornate)
@@ -453,7 +475,10 @@ utente al gruppo `input`).
 
 ## Personalizzazione
 
-- Cambia la scorciatoia modificando `RICK_HOTKEY` in `.env` (es. `ctrl+shift+r`).
+- La scorciatoia si cambia piu' facilmente da `Settings.bat` (vedi sopra).
+  `RICK_HOTKEY` in `.env` (es. `ctrl+shift+r`) ha la precedenza su quella
+  scelta, e accetta anche qualsiasi altro nome di tasto che il modulo
+  `keyboard` conosce.
 - **Lingua**: scegli Italiano/English nella finestra al primo avvio, oppure
   imposta `RICK_LANGUAGE=it` o `=en` in `.env`. Cambia il prompt di Rick
   (risponde in quella lingua), la voce di default e la lingua suggerita al

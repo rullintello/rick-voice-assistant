@@ -129,16 +129,31 @@ class FakeSpeaker:
 
 
 class AppTest(unittest.TestCase):
+    # the keys Rick should end up listening on, and how the status bar names them
+    hotkey, key_label = "alt+r", "Alt+R"
+
+    def prepare_settings(self):
+        """For subclasses: settings in place before Rick starts."""
+
     def setUp(self):
         self.tmp = isolate_rick_home(self)
+        self.prepare_settings()
         self.recorder = FakeRecorder(self.tmp)
         self.rick = FakeRick()
         self.resets = 0
         self.rick.reset_conversation = lambda: setattr(self, "resets", self.resets + 1)
         self.speaker = FakeSpeaker(self.tmp)
         self.question = "dove trovo lo scudo leggendario?"
-        hotkeys = {}
+        self.registered = {}
+        self.hotkey_attempts = []
         self.workers = []
+
+        def add_hotkey(key, callback):
+            # like keyboard: a key name it doesn't know fails at registration
+            self.hotkey_attempts.append(key)
+            if "nosuchkey" in key:
+                raise ValueError(f"Key {key!r} is not mapped to any known key.")
+            self.registered[key] = callback
 
         def worker_thread(*args, **kwargs):
             thread = threading.Thread(*args, **kwargs)
@@ -146,7 +161,7 @@ class AppTest(unittest.TestCase):
             return thread
 
         patches = {
-            "keyboard": mock.Mock(add_hotkey=lambda key, cb: hotkeys.__setitem__(key, cb)),
+            "keyboard": mock.Mock(add_hotkey=add_hotkey),
             "threading": types.SimpleNamespace(Thread=worker_thread, Lock=threading.Lock),
             "Recorder": lambda: self.recorder,
             "Rick": lambda: self.rick,
@@ -166,14 +181,15 @@ class AppTest(unittest.TestCase):
         with mock.patch.object(app, "BookWindow", lambda **kw: books.append(FakeBook(**kw)) or books[-1]):
             app.main()
         self.book = books[0]
-        self.press = hotkeys[config.HOTKEY]
+        self.assertEqual(list(self.registered), [self.hotkey])
+        self.press = self.registered[self.hotkey]
 
     # -- helpers ---------------------------------------------------------
     def ready(self):
-        return app._t("status_ready", hotkey=config.HOTKEY)
+        return app._t("status_ready", hotkey=self.key_label)
 
     def recording(self):
-        return app._t("status_recording", hotkey=config.HOTKEY)
+        return app._t("status_recording", hotkey=self.key_label)
 
     def wait_for_status(self, text):
         self.assertTrue(wait_until(lambda: self.book.status == text),
@@ -228,7 +244,7 @@ class AppTest(unittest.TestCase):
         self.rick.error = RuntimeError("Gemini non raggiungibile")
         self.ask_one_question()
         self.assertTrue(wait_until(lambda: app._t("error_speech") in self.speaker.spoken))
-        expected = app._error_status(self.rick.error)
+        expected = app._error_status(self.rick.error, self.key_label)
         self.wait_for_status(expected)
         self.assertIn("Gemini non raggiungibile", expected)
         self.assertEqual(self.book.turns, [])  # errors are never saved to a binder
@@ -238,10 +254,10 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.book.status, self.recording())
 
     def test_long_error_messages_are_shortened_to_one_line(self):
-        status = app._error_status(RuntimeError("x" * 500 + "\n{'error': {...}}"))
+        status = app._error_status(RuntimeError("x" * 500 + "\n{'error': {...}}"), self.key_label)
         self.assertNotIn("\n", status)
         self.assertLess(len(status), 250)
-        self.assertEqual(app._error_status(RuntimeError()).count("RuntimeError"), 1)
+        self.assertEqual(app._error_status(RuntimeError(), self.key_label).count("RuntimeError"), 1)
 
     def test_microphone_failure_does_not_kill_alt_r(self):
         # keyboard runs hotkey callbacks with no error handling: an exception
@@ -306,6 +322,31 @@ class AppTest(unittest.TestCase):
         self.speaker.block = False
         self.press()
         self.assertEqual(self.book.status, self.recording())
+
+class PickedShortcutTest(AppTest):
+    """Every turn above again, on keys picked in the settings window."""
+
+    hotkey, key_label = "ctrl+shift+f9", "Ctrl+Shift+F9"
+
+    def prepare_settings(self):
+        config.save_hotkey("Ctrl+Shift+F9")
+
+    def test_status_bar_names_the_picked_keys(self):
+        self.assertIn("Ctrl+Shift+F9", self.book.status)
+        self.assertNotIn("Alt+R", self.book.status)
+
+
+class UnknownShortcutInEnvTest(AppTest):
+    """RICK_HOTKEY in .env naming a key keyboard doesn't know: Rick still
+    starts, listening on Alt+R, and every turn above works the same."""
+
+    def prepare_settings(self):
+        os.environ["RICK_HOTKEY"] = "ctrl+nosuchkey"  # restored by isolate_rick_home
+
+    def test_falls_back_to_alt_r(self):
+        self.assertEqual(self.hotkey_attempts, ["ctrl+nosuchkey", "alt+r"])
+        self.assertEqual(self.book.status, self.ready())
+
 
 if __name__ == "__main__":
     unittest.main()

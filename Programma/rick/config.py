@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import jsonstore
+from . import hotkeys, jsonstore
 
 # Only Rick's own .env (next to main.py). Called with no path, load_dotenv
 # also searches every parent folder - so a .env left by some other project
@@ -25,8 +25,6 @@ def _env_int(name: str, default: int) -> int:
         logging.getLogger(__name__).warning("Ignoring invalid %s=%r, using %s", name, raw, default)
         return default
 
-
-HOTKEY = os.getenv("RICK_HOTKEY", "alt+r")
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 ENABLE_WEB_SEARCH = os.getenv("RICK_ENABLE_WEB_SEARCH", "true").strip().lower() in ("1", "true", "yes")
@@ -97,6 +95,40 @@ def get_language() -> str:
 
 def save_language(language: str) -> None:
     _save_user_config_key("language", language)
+
+
+def hotkey_set_in_env() -> bool:
+    """True when RICK_HOTKEY in .env decides the shortcut, so the settings
+    window shows it instead of offering to change it."""
+    return bool(os.getenv("RICK_HOTKEY", "").strip())
+
+
+def get_hotkey() -> str:
+    """The keys that start/stop listening, in keyboard's syntax ("alt+r").
+    Checked in order: RICK_HOTKEY in .env, the keys picked in the settings
+    window, then Alt+R.
+
+    .env is the hand-edited, power-user route, so any name keyboard knows is
+    passed through as before (app.py falls back to Alt+R if keyboard rejects
+    it). A saved choice that isn't valid (config.json edited by hand) is
+    logged and skipped instead of stopping Rick."""
+    env_hotkey = os.getenv("RICK_HOTKEY", "").strip()
+    if env_hotkey:
+        try:
+            return hotkeys.parse(env_hotkey)
+        except hotkeys.HotkeyError:
+            return env_hotkey.lower()
+    stored = _load_user_config().get("hotkey", "")
+    if stored:
+        try:
+            return hotkeys.parse(stored)
+        except hotkeys.HotkeyError:
+            logging.getLogger(__name__).warning("Ignoring invalid saved hotkey %r, using %s", stored, hotkeys.DEFAULT)
+    return hotkeys.DEFAULT
+
+
+def save_hotkey(hotkey: str) -> None:
+    _save_user_config_key("hotkey", hotkeys.parse(hotkey))
 
 
 WHISPER_MODEL_SIZE = os.getenv("RICK_WHISPER_MODEL_SIZE", "small")
