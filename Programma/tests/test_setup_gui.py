@@ -2,12 +2,14 @@
 from anyone watching the screen, and still saved correctly; the keys that
 start Rick, picked by pressing them."""
 
+import gc
 import tkinter as tk
 import unittest
+import weakref
 from tkinter import ttk
 from unittest import mock
 
-from rick import hotkey_picker, setup_gui
+from rick import hotkey_picker, setup_gui, voice_picker
 
 from support import require_display
 from test_hotkey_picker import press
@@ -243,6 +245,38 @@ class VoiceRowTest(DialogTestCase):
 
         result = self.run_dialog(driver, prefill=dict(self.PREFILL, locked_voice=env_voice))
         self.assertIsNone(result["voice"])
+
+
+
+class ClosedWindowTest(DialogTestCase):
+    def test_the_window_is_freed_before_returning(self):
+        # Left to Python's cycle collector, the closed window would be freed
+        # on whatever thread runs it next (e.g. the one loading the speech
+        # model), and Tcl aborts the program when that isn't the main thread.
+        windows = []
+        real_tk = tk.Tk
+
+        def tracked_tk():
+            root = real_tk()
+            windows.append(weakref.ref(root))
+            return root
+
+        def driver(root):
+            widgets(root, tk.Entry)[0].insert(0, "gem")
+            try_button = next(
+                b for b in widgets(root, tk.Button) if b.cget("text") == voice_picker.STRINGS["it"]["try"]
+            )
+            try_button.invoke()  # the sample's result check was what kept the window alive
+            root.after(300, lambda: self.save(root))
+
+        gc.disable()  # so only ask_for_api_keys itself can collect
+        try:
+            with mock.patch.object(tk, "Tk", tracked_tk), \
+                    mock.patch.object(voice_picker, "say_sample", lambda language, voice: True):
+                self.run_dialog(driver)
+            self.assertIsNone(windows[0](), "the closed window is still alive")
+        finally:
+            gc.enable()
 
 
 if __name__ == "__main__":

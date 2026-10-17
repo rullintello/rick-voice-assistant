@@ -14,7 +14,7 @@ from unittest import mock
 
 from rick import config, tts, voice_picker, voices
 
-from support import isolate_rick_home, require_display
+from support import free_tk_after_test, isolate_rick_home, require_display
 
 
 class CatalogTest(unittest.TestCase):
@@ -162,6 +162,7 @@ class VoicePickerTest(unittest.TestCase):
     def setUp(self):
         require_display(self)
         self.root = tk.Tk()
+        free_tk_after_test(self, "root")
         self.addCleanup(self.root.destroy)
         self.said = []
         self.answer = True  # what the fake say() reports: True = Microsoft spoke
@@ -193,6 +194,11 @@ class VoicePickerTest(unittest.TestCase):
             self.root.update()
             time.sleep(0.01)
         self.assertFalse(picker._busy, "the Try button never came back")
+        # self.say is this test's method, so the worker holds this test and
+        # its Tk root: it must be done before the test ends and lets go of
+        # them, or the root would be freed on the worker's thread
+        picker._worker.join(5)
+        self.assertFalse(picker._worker.is_alive())
         return picker.hint.cget("text")
 
     def test_starts_on_the_saved_voice_or_the_default(self):
@@ -233,6 +239,22 @@ class VoicePickerTest(unittest.TestCase):
         with self.assertLogs(voice_picker.log, "WARNING"):
             text = self.press_try(self.make())
         self.assertIn("no sound device", text)
+
+    def test_the_worker_holds_nothing_of_the_window(self):
+        # Tk objects must be freed on Tk's thread: a worker holding the last
+        # reference to the window (closed while the sample plays) would make
+        # Tcl abort the program ("async handler deleted by the wrong thread")
+        release = threading.Event()
+        picker = voice_picker.VoicePicker(self.root, "it", say=lambda language, voice: release.wait(5))
+        picker.button.invoke()
+        try:
+            held = [cell.cell_contents for cell in picker._worker._target.__closure__]
+            for value in held:
+                self.assertNotIsInstance(value, (voice_picker.VoicePicker, tk.Misc))
+                self.assertIsNot(getattr(value, "__self__", None), picker)
+        finally:
+            release.set()
+            picker._worker.join(5)
 
     def test_voice_from_env_is_shown_and_tried_but_not_offered(self):
         env_voice = voices.Voice("env", "it-IT-IsabellaNeural", "it-IT-IsabellaNeural", gender="")

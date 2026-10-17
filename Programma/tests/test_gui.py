@@ -10,7 +10,7 @@ from unittest import mock
 import rick
 from rick import config, gui, history, hotkeys, updates
 
-from support import call_on_tk, flush, isolate_rick_home, require_display, run_with_mainloop
+from support import call_on_tk, flush, free_tk_after_test, isolate_rick_home, require_display, run_with_mainloop
 from test_hotkey_picker import press
 
 
@@ -27,6 +27,7 @@ class GuiTestCase(unittest.TestCase):
         self.book = gui.BookWindow(
             language=self.language, on_new_chat=self.count_new_chat, shortcut=self.make_shortcut()
         )
+        free_tk_after_test(self, "book")
         self.addCleanup(self.book.root.destroy)
         self.pump()
 

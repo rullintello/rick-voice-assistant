@@ -66,6 +66,7 @@ class VoicePicker:
         self._say = say or say_sample
         self._language = language
         self._busy = False
+        self._worker = None  # the thread saying the last sample
 
         self.frame = tk.Frame(parent)
         self._title = tk.Label(self.frame, font=("Segoe UI", 11), justify="center")
@@ -118,33 +119,43 @@ class VoicePicker:
         """Says a short line with the selected voice, on a worker thread (it
         takes a second or two): the window stays usable meanwhile. The worker
         never touches Tk itself: it leaves the outcome in a queue that the
-        window checks, which works whether or not Tk's mainloop is running."""
+        window checks, which works whether or not Tk's mainloop is running.
+
+        It doesn't even hold a reference to the window (only plain values):
+        if the window is closed while the sample plays, the worker would
+        otherwise let go of the last reference to it, and Tcl aborts the
+        whole program when its objects are freed on another thread."""
         if self._busy:
             return
         self._busy = True
         self.button.config(state="disabled")
         self._show_note(self._strings["trying"])
-        language, voice, strings = self._language, self.voice, self._strings
+        language, voice, strings, say = self._language, self.voice, self._strings, self._say
         outcome: "queue.Queue" = queue.Queue()
 
         def work() -> None:
             try:
-                online = self._say(language, voice)
+                online = say(language, voice)
                 outcome.put((None, NOTE_COLOR) if online else (strings["backup"], "#b06000"))
             except Exception as exc:
                 log.warning("Voice sample failed", exc_info=True)
                 outcome.put((strings["failed"].format(reason=describe_error(exc, limit=80)), "red"))
 
-        def check() -> None:
-            try:
-                text, color = outcome.get_nowait()
-            except queue.Empty:
-                self.frame.after(50, check)
-                return
-            self._done(text, color)
+        self._worker = threading.Thread(target=work, daemon=True)
+        self._worker.start()
+        self.frame.after(50, self._check, outcome)
 
-        threading.Thread(target=work, daemon=True).start()
-        self.frame.after(50, check)
+    def _check(self, outcome: "queue.Queue") -> None:
+        # A method, not a closure inside try_voice: a closure that schedules
+        # itself again refers to itself, a reference cycle that would keep
+        # the whole window alive after it's closed (see setup_gui.py for why
+        # that matters).
+        try:
+            text, color = outcome.get_nowait()
+        except queue.Empty:
+            self.frame.after(50, self._check, outcome)
+            return
+        self._done(text, color)
 
     def _done(self, text, color) -> None:
         self._busy = False

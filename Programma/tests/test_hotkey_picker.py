@@ -14,7 +14,7 @@ import unittest
 from rick import hotkey_picker
 from rick.hotkey_picker import HotkeyPicker
 
-from support import require_display
+from support import free_tk_after_test, require_display
 
 IT = hotkey_picker.STRINGS["it"]
 EN = hotkey_picker.STRINGS["en"]
@@ -34,6 +34,7 @@ class PickerTest(unittest.TestCase):
     def setUp(self):
         require_display(self)
         self.root = tk.Tk()
+        free_tk_after_test(self, "root")
         self.addCleanup(self.root.destroy)
         self.picked = []
 

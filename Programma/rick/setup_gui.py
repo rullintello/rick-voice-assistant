@@ -1,3 +1,4 @@
+import gc
 import tkinter as tk
 import webbrowser
 
@@ -52,7 +53,17 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
     any. Returns {"gemini": "", "tavily": "", "language": "it", "hotkey":
     "alt+r", "voice": "giuseppe"} - "gemini" is "" only if the dialog was
     cancelled, "hotkey" and "voice" are None when .env decides them."""
-    prefill = prefill or {}
+    result = _run_dialog(prefill or {}, title)
+    # The closed window is still held by reference cycles among its widgets
+    # and callbacks, so Python's cycle collector frees it later - on whatever
+    # thread happens to run it, maybe one loading the speech model or
+    # answering a question. Tcl aborts the whole program when its interpreter
+    # is freed on another thread than the one that made it: free it now, here.
+    gc.collect()
+    return result
+
+
+def _run_dialog(prefill: dict, title: str) -> dict:
     locked = bool(prefill.get("hotkey_locked"))
     result = {"gemini": "", "tavily": "", "language": prefill.get("language", "it"), "hotkey": None, "voice": None}
     chosen_hotkey = prefill.get("hotkey") or hotkeys.DEFAULT
