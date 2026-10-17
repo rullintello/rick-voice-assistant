@@ -29,7 +29,7 @@ def _notify(text: str) -> None:
 def main() -> None:
     # Imported here, not at the top, so a failure (e.g. a malformed .env)
     # is caught by run() and shown, instead of silently killing pythonw.
-    from rick import config, hotkeys
+    from rick import config, hotkeys, voices
     from rick.setup_gui import ask_for_api_keys
 
     old_hotkey = config.get_hotkey()
@@ -39,6 +39,8 @@ def main() -> None:
         "language": config.get_language(),
         "hotkey": old_hotkey,
         "hotkey_locked": config.hotkey_set_in_env(),
+        "voices": {language: config.get_voice(language).id for language in voices.VOICES},
+        "locked_voice": config.get_voice() if config.voice_set_in_env() else None,
     }
     keys = ask_for_api_keys(prefill=prefill, title="Rick - impostazioni")
     language = keys.get("language", "it")
@@ -49,6 +51,8 @@ def main() -> None:
     config.save_gemini_api_key(keys["gemini"])
     config.save_tavily_api_key(keys["tavily"])
     config.save_language(language)
+    if keys.get("voice"):  # None when .env decides the voice
+        config.save_voice(language, keys["voice"])
     message = _MESSAGES[language]["saved"]
     # A running Rick registered its keys when it started: say so, rather
     # than leave the player pressing new keys that don't work yet.

@@ -4,6 +4,7 @@ start Rick, picked by pressing them."""
 
 import tkinter as tk
 import unittest
+from tkinter import ttk
 from unittest import mock
 
 from rick import hotkey_picker, setup_gui
@@ -15,7 +16,8 @@ from test_hotkey_picker import press
 def widgets(root, cls):
     found = []
     for child in root.winfo_children():
-        if isinstance(child, cls):
+        # ttk's Combobox is a tk.Entry too: the voice list isn't a key field
+        if isinstance(child, cls) and not isinstance(child, ttk.Combobox):
             found.append(child)
         found += widgets(child, cls)
     return found
@@ -95,7 +97,9 @@ class SetupDialogTest(DialogTestCase):
             self.save(root)
 
         result = self.run_dialog(driver)
-        self.assertEqual(result, {"gemini": "gem-typed", "tavily": "", "language": "it", "hotkey": "alt+r"})
+        self.assertEqual(
+            result, {"gemini": "gem-typed", "tavily": "", "language": "it", "hotkey": "alt+r", "voice": "giuseppe"}
+        )
 
     def test_privacy_note_in_both_languages(self):
         texts = {}
@@ -189,6 +193,56 @@ class ShortcutPickerTest(DialogTestCase):
         self.assertEqual(seen["keys"], "Ctrl+Shift+R")
         self.assertEqual(seen["button"], "disabled")
         self.assertIsNone(result["hotkey"])  # nothing to save: .env decides
+
+
+class VoiceRowTest(DialogTestCase):
+    """The voice row of the dialog (rick/voice_picker.py, tested in depth in
+    test_voices.py): what it starts from and what the dialog returns."""
+
+    PREFILL = {"gemini": "gem-123", "language": "it"}
+
+    def combobox(self, root):
+        found = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Combobox):
+                    found.append(child)
+                walk(child)
+
+        walk(root)
+        (box,) = found
+        return box
+
+    def test_the_selected_voice_is_returned(self):
+        def driver(root):
+            box = self.combobox(root)
+            box.set("Diego (maschile)")
+            box.event_generate("<<ComboboxSelected>>")
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=self.PREFILL)
+        self.assertEqual(result["voice"], "diego")
+
+    def test_switching_language_returns_that_languages_voice(self):
+        def driver(root):
+            _it, en_button = widgets(root, tk.Radiobutton)
+            en_button.invoke()
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=dict(self.PREFILL, voices={"it": "elsa", "en": "brian"}))
+        self.assertEqual((result["language"], result["voice"]), ("en", "brian"))
+
+    def test_a_voice_from_env_returns_nothing_to_save(self):
+        from rick import voices
+
+        env_voice = voices.Voice("env", "it-IT-IsabellaNeural", "it-IT-IsabellaNeural", gender="")
+
+        def driver(root):
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=dict(self.PREFILL, locked_voice=env_voice))
+        self.assertIsNone(result["voice"])
 
 
 if __name__ == "__main__":

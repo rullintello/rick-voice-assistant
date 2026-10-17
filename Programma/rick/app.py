@@ -54,7 +54,11 @@ def ensure_api_keys() -> None:
     from .setup_gui import ask_for_api_keys
 
     keys = ask_for_api_keys(
-        prefill={"hotkey": config.get_hotkey(), "hotkey_locked": config.hotkey_set_in_env()}
+        prefill={
+            "hotkey": config.get_hotkey(),
+            "hotkey_locked": config.hotkey_set_in_env(),
+            "locked_voice": config.get_voice() if config.voice_set_in_env() else None,
+        }
     )
     if not keys["gemini"]:
         show_error_dialog("Rick", STRINGS[keys.get("language", "it")]["need_gemini_key"])
@@ -65,6 +69,8 @@ def ensure_api_keys() -> None:
     config.save_language(keys.get("language", "it"))
     if keys.get("hotkey"):
         config.save_hotkey(keys["hotkey"])
+    if keys.get("voice"):
+        config.save_voice(keys.get("language", "it"), keys["voice"])
 
 
 class Shortcut:

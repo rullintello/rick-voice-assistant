@@ -13,14 +13,14 @@ from support import isolate_rick_home
 
 
 def writes(content: bytes):
-    def render(text, out_path):
+    def render(text, out_path, *_voice):
         with open(out_path, "wb") as f:
             f.write(content + text.encode())
     return render
 
 
 def fails(message):
-    def render(text, out_path):
+    def render(text, out_path, *_voice):
         raise OSError(message)
     return render
 

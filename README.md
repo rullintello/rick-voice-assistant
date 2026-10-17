@@ -121,7 +121,7 @@ one in 30 seconds, no credit card needed), then remembers both choices for
 next time — handy if you're sharing the project with someone else: they just
 pick their language and paste their own key the first time they open it.
 
-To change your language, keys or shortcut **after** the initial setup,
+To change your language, keys, voice or shortcut **after** the initial setup,
 double-click `Settings.bat`: it reopens the same window pre-filled with what
 you chose before, so you don't have to start from scratch.
 
@@ -174,11 +174,13 @@ and usually needs the script run with `sudo` (or add your user to the
   `RICK_LANGUAGE=it` or `=en` in `.env`. Changes Rick's prompt (answers in
   that language), the default voice, and the language hint for speech
   recognition.
-- The default voice is an adult female voice (`it-IT-ElsaNeural` for
-  Italian, `en-US-JennyNeural` for English). The only two free Italian
-  female voices with `edge-tts` are Elsa and `it-IT-IsabellaNeural` (more
-  youthful/childish) — force a different one with `RICK_EDGE_VOICE` in
-  `.env`.
+- **Rick's voice** is picked in the settings window (`Settings.bat`): a
+  few of Microsoft's free voices per language, male and female, with a
+  **▶ Try** button. By default Rick is a he: Giuseppe in Italian, a slightly
+  deeper Andrew in English. The choice applies from the next answer, even
+  with Rick open. Any other `edge-tts` voice can be set with
+  `RICK_EDGE_VOICE` in `.env` (with `RICK_EDGE_RATE` / `RICK_EDGE_PITCH`),
+  which then takes priority over the window.
 - Rick's "personality" and instructions live in the system prompt in
   `Programma/rick/brain.py` (`SYSTEM_PROMPT_IT` / `SYSTEM_PROMPT_EN`), free
   to edit.
@@ -308,6 +310,15 @@ They need no microphone, speakers, keys or internet (all of that is
 simulated). The window tests need a screen: on a headless Linux machine run
 them with `xvfb-run -a python -m unittest discover -s tests`.
 
+Rick's libraries are pinned to exact, tested versions, and they're updated
+by hand on purpose. The one exception is `edge-tts`, which breaks whenever
+Microsoft changes its voice service:
+
+- a daily check on GitHub tries Rick's voices and opens an issue if
+  Microsoft stops answering;
+- Dependabot proposes the new `edge-tts` as a pull request as soon as it's
+  out.
+
 Rick stays free for everyone. If you use it and want to say thanks, you can
 buy me a coffee (entirely optional) at
 [ko-fi.com/rullintello](https://ko-fi.com/rullintello).
@@ -435,7 +446,7 @@ entrambe le scelte per le volte dopo — utile se passi il progetto a
 qualcun altro: gli basta scegliere la sua lingua e incollare la sua chiave
 alla prima apertura.
 
-Per cambiare lingua, chiavi o scorciatoia **dopo** la prima configurazione,
+Per cambiare lingua, chiavi, voce o scorciatoia **dopo** la prima configurazione,
 fai doppio click su `Settings.bat`: riapre la stessa finestra gia'
 precompilata con quello che avevi scelto, senza doverlo rifare da zero.
 
@@ -490,11 +501,14 @@ utente al gruppo `input`).
   imposta `RICK_LANGUAGE=it` o `=en` in `.env`. Cambia il prompt di Rick
   (risponde in quella lingua), la voce di default e la lingua suggerita al
   riconoscimento vocale.
-- La voce di default e' femminile adulta (`it-IT-ElsaNeural` in italiano,
-  `en-US-JennyNeural` in inglese). Le uniche due voci femminili italiane
-  gratuite con `edge-tts` sono Elsa e `it-IT-IsabellaNeural` (piu'
-  giovanile/da bambina) — forzane una diversa con `RICK_EDGE_VOICE` in
-  `.env`.
+- **La voce di Rick** si sceglie nella finestra delle impostazioni
+  (`Settings.bat`): alcune voci gratuite di Microsoft per ogni lingua,
+  maschili e femminili, con il pulsante **▶ Prova**. Di partenza Rick e' un
+  lui: Giuseppe in italiano, un Andrew un po' piu' grave in inglese. La
+  scelta vale dalla risposta successiva, anche con Rick aperto. Qualsiasi
+  altra voce di `edge-tts` si imposta con `RICK_EDGE_VOICE` in `.env` (con
+  `RICK_EDGE_RATE` / `RICK_EDGE_PITCH`), che allora ha la precedenza sulla
+  finestra.
 - Il "carattere" e le istruzioni di Rick sono nel prompt di sistema in
   `Programma/rick/brain.py` (`SYSTEM_PROMPT_IT` / `SYSTEM_PROMPT_EN`),
   modificabile liberamente.
@@ -628,6 +642,15 @@ python -m unittest discover -s tests
 Non servono microfono, casse, chiavi o internet (sono tutti simulati). I
 test della finestra hanno bisogno di uno schermo: su Linux senza schermo
 lanciali con `xvfb-run -a python -m unittest discover -s tests`.
+
+Le librerie di Rick sono fissate a versioni precise e provate, e si
+aggiornano a mano apposta. L'unica eccezione e' `edge-tts`, che si rompe
+ogni volta che Microsoft cambia il suo servizio vocale:
+
+- un controllo giornaliero su GitHub prova le voci di Rick e apre una
+  segnalazione se Microsoft smette di rispondere;
+- Dependabot propone la nuova versione di `edge-tts` come pull request
+  appena esce.
 
 Rick resta gratuito per chiunque. Se lo usi e ti va di ringraziare, puoi
 offrirmi un caffe (del tutto facoltativo) su

@@ -59,7 +59,7 @@ class HotkeyPicker:
 
         self.frame = tk.Frame(parent)
         self._title = tk.Label(self.frame, font=("Segoe UI", 11), justify="center")
-        self._title.pack(pady=(4, 6))
+        self._title.pack(pady=(2, 4))
         row = tk.Frame(self.frame)
         row.pack()
         self.box = tk.Label(row, font=("Segoe UI", 11, "bold"), width=22, relief="groove", padx=8, pady=4)
@@ -70,7 +70,7 @@ class HotkeyPicker:
         if locked:
             self.button.config(state="disabled")
         self.hint = tk.Label(self.frame, font=("Segoe UI", 9), fg=NOTE_COLOR, justify="center")
-        self.hint.pack(pady=(4, 0))
+        self.hint.pack(pady=(2, 0))
 
         # The box reads the keys while it has the focus (start() gives it),
         # so nothing gets typed into the window's other fields meanwhile.

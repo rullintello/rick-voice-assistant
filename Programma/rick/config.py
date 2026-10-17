@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import hotkeys, jsonstore
+from . import hotkeys, jsonstore, voices
 
 # Only Rick's own .env (next to main.py). Called with no path, load_dotenv
 # also searches every parent folder - so a .env left by some other project
@@ -135,19 +135,40 @@ WHISPER_MODEL_SIZE = os.getenv("RICK_WHISPER_MODEL_SIZE", "small")
 WHISPER_DEVICE = os.getenv("RICK_WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE_TYPE = os.getenv("RICK_WHISPER_COMPUTE_TYPE", "int8")
 
-# it-IT-ElsaNeural / en-US-JennyNeural both read as natural adult female
-# voices (circa 25-30). it-IT-IsabellaNeural is the only other free Italian
-# voice but sounds more childish/youthful.
-_DEFAULT_EDGE_VOICE = {"it": "it-IT-ElsaNeural", "en": "en-US-JennyNeural"}
+# Only used with RICK_EDGE_VOICE: the voices offered in the settings window
+# (rick/voices.py) bring their own speed and pitch.
+EDGE_PITCH = os.getenv("RICK_EDGE_PITCH", "+0Hz").strip() or "+0Hz"
+EDGE_RATE = os.getenv("RICK_EDGE_RATE", "+0%").strip() or "+0%"
 
 
-def get_edge_voice() -> str:
+def voice_set_in_env() -> bool:
+    """True when RICK_EDGE_VOICE in .env decides the voice, so the settings
+    window shows that instead of offering a choice."""
+    return bool(os.getenv("RICK_EDGE_VOICE", "").strip())
+
+
+def get_voice(language: str | None = None) -> voices.Voice:
+    """Rick's voice for `language` (Rick's language if None): RICK_EDGE_VOICE
+    in .env if set (any edge-tts voice, with RICK_EDGE_RATE/PITCH), else the
+    one picked in the settings window, else that language's default."""
+    language = language or get_language()
     override = os.getenv("RICK_EDGE_VOICE", "").strip()
-    return override or _DEFAULT_EDGE_VOICE[get_language()]
+    if override:
+        return voices.Voice("env", override, override, gender="", rate=EDGE_RATE, pitch=EDGE_PITCH)
+    picked = _load_user_config().get("voices", {})
+    return voices.find(language, picked.get(language) if isinstance(picked, dict) else None)
 
 
-EDGE_PITCH = os.getenv("RICK_EDGE_PITCH", "+0Hz")
-EDGE_RATE = os.getenv("RICK_EDGE_RATE", "+0%")
+def save_voice(language: str, voice_id: str) -> None:
+    """Remembers the voice picked for `language` (each language keeps its own)."""
+    if voices.find(language, voice_id).id != voice_id:
+        raise ValueError(f"no voice {voice_id!r} for {language!r}")
+    data = _load_user_config()
+    picked = data.get("voices")
+    picked = dict(picked) if isinstance(picked, dict) else {}
+    picked[language] = voice_id
+    data["voices"] = picked
+    jsonstore.write_json(USER_CONFIG_FILE, data)
 
 SAMPLE_RATE = _env_int("RICK_SAMPLE_RATE", 16000)
 MAX_HISTORY_TURNS = _env_int("RICK_MAX_HISTORY_TURNS", 12)
