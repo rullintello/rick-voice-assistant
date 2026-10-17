@@ -3,10 +3,12 @@ buttons, and answers that arrive while the player is changing binders.
 Opens real Tk windows, so it needs a display (skipped automatically
 without one; on a headless Linux box run the suite under xvfb-run)."""
 
+import threading
 import unittest
 from unittest import mock
 
-from rick import config, gui, history, hotkeys
+import rick
+from rick import config, gui, history, hotkeys, updates
 
 from support import call_on_tk, flush, isolate_rick_home, require_display, run_with_mainloop
 from test_hotkey_picker import press
@@ -481,6 +483,79 @@ class LockedKeysButtonTest(GuiTestCase):
 class NoShortcutTest(GuiTestCase):
     def test_no_keys_button_without_a_shortcut(self):
         self.assertIsNone(self.book._keys_button)
+
+
+
+class UpdateNoticeTest(GuiTestCase):
+    """The strip over the page that says a newer Rick is out (the check
+    itself is rick/updates.py)."""
+
+    def banner_shown(self):
+        return self.book._update_banner.winfo_manager() == "pack"
+
+    def notice(self):
+        return self.book._update_link.cget("text")
+
+    def test_hidden_until_a_newer_version_is_found(self):
+        self.assertFalse(self.banner_shown())
+
+    def test_shown_over_the_page_from_the_checks_thread(self):
+        def driver():
+            # like updates.watch: called on its own thread while Tk runs
+            self.book.show_update("1.0.3")
+            call_on_tk(self.book.root, lambda: None)
+
+        run_with_mainloop(self.book.root, driver)
+        self.assertTrue(self.banner_shown())
+        self.assertEqual(self.notice(), f"🆕 Nuova versione: Rick 1.0.3 (tu hai la {rick.__version__}). Clicca qui per scaricarla")
+        main = self.book._update_banner.master
+        order = main.pack_slaves()
+        self.assertLess(order.index(self.book._update_banner), order.index(self.book._text.master))
+
+    def test_click_opens_the_download_page(self):
+        self.book.show_update("1.0.3")
+        self.pump()
+        self.book._update_link.event_generate("<Button-1>")
+        self.pump()
+        self.browser_open.assert_called_once_with(updates.DOWNLOAD_PAGE)
+
+    def test_x_hides_it_and_a_later_version_shows_it_again(self):
+        self.book.show_update("1.0.3")
+        self.pump()
+        self.book._update_hide.event_generate("<Button-1>")
+        self.pump()
+        self.assertFalse(self.banner_shown())
+        self.book.show_update("1.0.4")
+        self.pump()
+        self.assertTrue(self.banner_shown())
+        self.assertIn("1.0.4", self.notice())
+        self.browser_open.assert_not_called()
+
+    def test_the_page_stays_usable_at_minimum_size(self):
+        self.book.show_update("1.0.3")
+        self.book.root.geometry("640x420")
+        self.pump()
+        self.assertGreater(self.book._update_banner.winfo_height(), 10)
+        self.assertGreater(self.book._text.winfo_height(), 60)
+
+    def test_when_running_waits_for_the_window(self):
+        calls = []
+        self.book.when_running(lambda: calls.append(threading.current_thread()))
+        self.assertEqual(calls, [])
+        self.pump()
+        self.assertEqual(calls, [threading.main_thread()])
+
+
+class EnglishUpdateNoticeTest(GuiTestCase):
+    language = "en"
+
+    def test_notice_in_english(self):
+        self.book.show_update("1.1")
+        self.pump()
+        self.assertEqual(
+            self.book._update_link.cget("text"),
+            f"🆕 New version: Rick 1.1 (you have {rick.__version__}). Click here to download it",
+        )
 
 
 if __name__ == "__main__":

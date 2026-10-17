@@ -62,6 +62,9 @@ binder's conversation.
   closes (see "Privacy and data").
 - **⌨️ Keys** (bottom left) shows the keys that start Rick: click it, press
   the new keys, then **Save**. They work right away, no restart needed.
+- **🆕 New version**: a green strip above the page appears when a newer
+  Rick is out. Click it to open the download page, or ✕ to hide it until
+  Rick's next start (see "Updating Rick").
 - Clicking a binder in the list on the left reopens it and makes it the
   active one, to review past questions or keep asking new ones about that
   game.
@@ -141,6 +144,27 @@ accurate for rare items and specific quests. If you skip this field, Rick
 still works, just a little less precise on niche details. Searches are also
 cached locally: if someone asks the same thing a second time, Rick won't
 search again, saving the free quota.
+
+## Updating Rick
+
+Once a day Rick checks on GitHub whether a newer version is out, and if so
+says it in its window, with a green **🆕 New version** strip above the page.
+To update:
+
+1. Click the strip (or open the
+   [releases page](https://github.com/rullintello/rick-voice-assistant/releases/latest))
+   and download the new version's zip.
+2. Close Rick, delete the old Rick folder and extract the new zip in its
+   place. If you edited `Programma\.env`, copy it somewhere safe first and
+   put it back in the new `Programma` folder.
+3. Double-click `Run Rick.bat`. Like the first time, it shows the Python
+   notice and installs the libraries again (a few minutes).
+
+Your binders, keys, voice and shortcut stay as they are: they're saved in
+the `.rick` folder inside your user folder, not in Rick's folder.
+
+The check sends nothing about you (see "Privacy and data").
+`RICK_CHECK_UPDATES=false` in `.env` turns it off.
 
 ## Manual installation (Linux/Mac, or to customize)
 
@@ -238,7 +262,7 @@ folder:
 - the web search cache and the error log (`rick.log`, about 3 MB at most).
   Rick writes neither your keys nor your questions to it.
 
-**What goes online**, and only when you ask a question:
+**What goes online** when you ask a question:
 
 - to **Google Gemini**: the text of your question, the earlier messages of
   the current chat and, if the chat is named after a game, up to the last
@@ -247,6 +271,12 @@ folder:
   name, for the web search;
 - to **Microsoft**'s speech service (edge-tts): the text of Rick's answer,
   to read it aloud.
+
+And once a day, to **GitHub**: a request for the number of Rick's latest
+version, to tell you when a new one is out (see "Updating Rick"). It holds
+nothing about you, your keys or your questions: GitHub only sees your IP
+address, as any website does. `RICK_CHECK_UPDATES=false` in `.env` turns it
+off.
 
 On Gemini's free tier, Google may use the content it receives to improve its
 services; the rules can differ by country: the official ones are in the
@@ -319,6 +349,11 @@ Microsoft changes its voice service:
 - Dependabot proposes the new `edge-tts` as a pull request as soon as it's
   out.
 
+Each release's tag is `v` followed by `__version__` in
+`Programma/rick/__init__.py`: update that number before publishing a new
+release, or the new Rick will keep telling its users a newer version is
+out.
+
 Rick stays free for everyone. If you use it and want to say thanks, you can
 buy me a coffee (entirely optional) at
 [ko-fi.com/rullintello](https://ko-fi.com/rullintello).
@@ -385,6 +420,10 @@ la "pagina" aperta, con la conversazione di quel raccoglitore.
 - **⌨️ Tasti** (in basso a sinistra) mostra i tasti che fanno partire Rick:
   cliccalo, premi i nuovi tasti, poi **Salva**. Funzionano subito, senza
   riavviare Rick.
+- **🆕 Nuova versione**: quando esce una versione piu' nuova di Rick, sopra
+  la pagina compare una striscia verde. Cliccala per aprire la pagina da cui
+  scaricarla, oppure premi ✕ per nasconderla fino al prossimo avvio (vedi
+  "Aggiornare Rick").
 - Cliccando su un raccoglitore nella lista a sinistra lo riapri e lo rendi
   quello attivo, per rivedere le domande passate o continuare a fargliene di
   nuove su quel gioco.
@@ -467,6 +506,27 @@ campo, Rick funziona lo stesso, solo un po' meno preciso sui dettagli piu'
 di nicchia. Le ricerche vengono anche salvate in una piccola cache locale:
 se qualcuno chiede la stessa cosa una seconda volta, Rick non ricerca di
 nuovo, risparmiando la quota gratuita.
+
+## Aggiornare Rick
+
+Una volta al giorno Rick controlla su GitHub se e' uscita una versione piu'
+nuova e, se c'e', te lo dice nella sua finestra con una striscia verde
+**🆕 Nuova versione** sopra la pagina. Per aggiornare:
+
+1. Clicca la striscia (o apri la
+   [pagina delle versioni](https://github.com/rullintello/rick-voice-assistant/releases/latest))
+   e scarica lo zip della nuova versione.
+2. Chiudi Rick, cancella la vecchia cartella di Rick ed estrai al suo posto
+   il nuovo zip. Se avevi modificato `Programma\.env`, prima mettilo da
+   parte e poi rimettilo nella nuova cartella `Programma`.
+3. Fai doppio click su `Run Rick.bat`. Come la prima volta, mostra l'avviso
+   di Python e reinstalla le librerie (qualche minuto).
+
+Raccoglitori, chiavi, voce e tasti restano come li avevi: sono salvati nella
+cartella `.rick` dentro la tua cartella utente, non in quella di Rick.
+
+Il controllo non invia niente su di te (vedi "Privacy e dati").
+`RICK_CHECK_UPDATES=false` nel file `.env` lo spegne.
 
 ## Installazione manuale (Linux/Mac, o per personalizzare)
 
@@ -567,7 +627,7 @@ cartella utente:
 - la cache delle ricerche web e il registro errori (`rick.log`, al massimo
   circa 3 MB). Rick non ci scrive ne' le chiavi ne' le tue domande.
 
-**Cosa va online**, e solo quando fai una domanda:
+**Cosa va online** quando fai una domanda:
 
 - a **Google Gemini**: il testo della domanda, i messaggi precedenti della
   chat in corso e, se la chat ha il nome di un gioco, fino alle ultime 10
@@ -576,6 +636,12 @@ cartella utente:
   gioco, per la ricerca web;
 - al servizio vocale di **Microsoft** (edge-tts): il testo della risposta di
   Rick, per leggerla ad alta voce.
+
+E una volta al giorno, a **GitHub**: una richiesta del numero dell'ultima
+versione di Rick, per avvisarti quando ne esce una nuova (vedi "Aggiornare
+Rick"). Non contiene niente su di te, sulle tue chiavi o sulle tue domande:
+GitHub vede solo il tuo indirizzo IP, come qualsiasi sito.
+`RICK_CHECK_UPDATES=false` nel file `.env` lo spegne.
 
 Con il piano gratuito di Gemini, Google puo' usare i contenuti che riceve per
 migliorare i suoi servizi; le regole possono cambiare da paese a paese:
@@ -651,6 +717,11 @@ ogni volta che Microsoft cambia il suo servizio vocale:
   segnalazione se Microsoft smette di rispondere;
 - Dependabot propone la nuova versione di `edge-tts` come pull request
   appena esce.
+
+Il tag di ogni release e' `v` seguito da `__version__` in
+`Programma/rick/__init__.py`: aggiorna quel numero prima di pubblicare una
+nuova release, altrimenti il nuovo Rick continuera' a dire ai suoi utenti che
+e' uscita una versione piu' nuova.
 
 Rick resta gratuito per chiunque. Se lo usi e ti va di ringraziare, puoi
 offrirmi un caffe (del tutto facoltativo) su

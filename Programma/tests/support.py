@@ -36,6 +36,7 @@ def isolate_rick_home(test: unittest.TestCase) -> Path:
         ("SEARCH_CACHE_FILE", "search_cache.json"),
         ("HISTORY_FILE", "history.json"),
         ("TEMP_DIR", "tmp"),
+        ("UPDATE_CHECK_FILE", "update_check.json"),
     ):
         patcher = mock.patch.object(config, attr, tmp / filename)
         patcher.start()

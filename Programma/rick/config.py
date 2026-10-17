@@ -29,6 +29,10 @@ def _env_int(name: str, default: int) -> int:
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 ENABLE_WEB_SEARCH = os.getenv("RICK_ENABLE_WEB_SEARCH", "true").strip().lower() in ("1", "true", "yes")
 
+# Once a day Rick asks GitHub which is its latest version, to say in the
+# window when a new one is out (see rick/updates.py).
+CHECK_FOR_UPDATES = os.getenv("RICK_CHECK_UPDATES", "true").strip().lower() in ("1", "true", "yes")
+
 # Per-user key storage so a friend you share the project with only has to
 # paste their keys once, in the first-run dialog (see rick/setup_gui.py) -
 # saved outside the project folder, never committed to git.
@@ -46,6 +50,9 @@ HISTORY_FILE = Path.home() / ".rick" / "history.json"
 # Temporary audio (the player's recorded question, Rick's spoken answer) -
 # see rick/userdata.py.
 TEMP_DIR = Path.home() / ".rick" / "tmp"
+
+# GitHub's last answer about Rick's latest version, and when it came.
+UPDATE_CHECK_FILE = Path.home() / ".rick" / "update_check.json"
 
 
 def _load_user_config() -> dict:

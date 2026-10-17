@@ -11,7 +11,7 @@ import types
 import unittest
 from unittest import mock
 
-from rick import app, config
+from rick import app, config, updates
 
 from support import isolate_rick_home, wait_until
 
@@ -29,6 +29,8 @@ class FakeBook:
         self.game = "Elden Ring"
         self.statuses = []
         self.turns = []
+        self.when_running_calls = []  # what main() asked to run once the window goes
+        self.updates_shown = []
         self._lock = threading.Lock()
 
     def set_status(self, text):
@@ -49,6 +51,12 @@ class FakeBook:
 
     def show_shortcut(self):
         self.shortcut_shown += 1
+
+    def show_update(self, version):
+        self.updates_shown.append(version)
+
+    def when_running(self, fn):
+        self.when_running_calls.append(fn)
 
     def run(self):
         pass  # the real one blocks in Tk's mainloop; the test drives instead
@@ -337,6 +345,27 @@ class AppTest(AppHarness):
         self.speaker.block = False
         self.press()
         self.assertEqual(self.book.status, self.recording())
+
+class UpdateCheckTest(AppHarness):
+    """The check for a newer Rick (rick/updates.py) starts with the window
+    and reports to it."""
+
+    def test_starts_once_the_window_runs(self):
+        (start_check,) = self.book.when_running_calls
+        with mock.patch.object(updates, "start", lambda on_newer: on_newer("9.9.9")):
+            start_check()  # the check finds 9.9.9 and tells the window
+        self.assertEqual(self.book.updates_shown, ["9.9.9"])
+
+
+class UpdateCheckOffTest(AppHarness):
+    def prepare_settings(self):
+        patcher = mock.patch.object(config, "CHECK_FOR_UPDATES", False)  # RICK_CHECK_UPDATES=false
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_not_started(self):
+        self.assertEqual(self.book.when_running_calls, [])
+
 
 class PickedShortcutTest(AppTest):
     """Every turn above again, on keys picked in the settings window."""

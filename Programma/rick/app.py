@@ -4,7 +4,7 @@ import threading
 
 import keyboard
 
-from . import config, hotkeys, userdata
+from . import __version__, config, hotkeys, updates, userdata
 from .audio import Recorder, arm_playback, chime_start, chime_stop, interrupt_playback, play_audio
 from .brain import Rick
 from .gui import BookWindow
@@ -142,6 +142,7 @@ class Shortcut:
 
 
 def main() -> None:
+    logging.info("Rick %s starting", __version__)
     userdata.purge_leftover_temp_files()
     ensure_api_keys()
 
@@ -291,4 +292,9 @@ def main() -> None:
     shortcut.on_changed = show_new_keys
     book.show_shortcut()  # start() may have fallen back to Alt+R
     book.set_status(ready_status())
+    if config.CHECK_FOR_UPDATES:
+        # GitHub's answer may be saved already (asked less than a day ago),
+        # so the check can call show_update() right away: start it once the
+        # window is running.
+        book.when_running(lambda: updates.start(book.show_update))
     book.run()

@@ -7,7 +7,7 @@ import webbrowser
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from . import history, userdata
+from . import __version__, history, updates, userdata
 from .hotkey_picker import HotkeyPicker
 from .startup import describe_error
 
@@ -98,6 +98,7 @@ _STRINGS = {
         "keys_cancel": "Annulla",
         "keys_close": "Chiudi",
         "keys_failed": "Questi tasti non funzionano su questo PC: Rick continua a usare {keys}.",
+        "update_notice": "🆕 Nuova versione: Rick {new} (tu hai la {current}). Clicca qui per scaricarla",
     },
     "en": {
         "title": "📖 Rick",
@@ -137,6 +138,7 @@ _STRINGS = {
         "keys_cancel": "Cancel",
         "keys_close": "Close",
         "keys_failed": "These keys don't work on this PC: Rick keeps using {keys}.",
+        "update_notice": "🆕 New version: Rick {new} (you have {current}). Click here to download it",
     },
 }
 
@@ -378,6 +380,7 @@ class BookWindow:
 
         text_frame = tk.Frame(main, bg=_PARCHMENT)
         text_frame.pack(fill="both", expand=True, padx=24, pady=(0, 6))
+        self._build_update_banner(main, above=text_frame)
         scrollbar = tk.Scrollbar(text_frame)
         scrollbar.pack(side="right", fill="y")
         self._text = tk.Text(
@@ -402,6 +405,31 @@ class BookWindow:
         self._text.tag_configure("body", font=(_SERIF, 13), foreground=_TEXT_GREEN, spacing3=14)
         self._text.tag_configure("divider", font=(_SERIF, 12), foreground=_GOLD, justify="center", spacing3=14)
         self._text.tag_configure("empty", font=(_SERIF, 12, "italic"), foreground=_LEATHER_LIGHT)
+
+    def _build_update_banner(self, parent: tk.Widget, above: tk.Widget) -> None:
+        """The "new version" strip over the page: built now, shown by
+        show_update() (packed before `above`, so the page makes room)."""
+        self._update_above = above
+        self._update_banner = tk.Frame(parent, bg=_TEXT_GREEN)
+        self._update_link = tk.Label(
+            self._update_banner,
+            font=(_SERIF, 11, "underline"),
+            bg=_TEXT_GREEN,
+            fg=_PARCHMENT,
+            cursor="hand2",
+            anchor="w",
+            justify="left",
+            padx=10,
+            pady=4,
+        )
+        self._update_link.pack(side="left", fill="x", expand=True)
+        self._update_link.bind("<Button-1>", lambda _e: webbrowser.open(updates.DOWNLOAD_PAGE))
+        self._update_link.bind("<Configure>", lambda e: self._update_link.configure(wraplength=max(e.width - 20, 100)))
+        self._update_hide = tk.Label(
+            self._update_banner, text="✕", font=("Segoe UI", 10), bg=_TEXT_GREEN, fg=_PARCHMENT, cursor="hand2", padx=10
+        )
+        self._update_hide.pack(side="right", fill="y")
+        self._update_hide.bind("<Button-1>", lambda _e: self._update_banner.pack_forget())
 
     def _build_status_bar(self) -> None:
         self._status_var = tk.StringVar(value="")
@@ -564,6 +592,17 @@ class BookWindow:
         """Thread-safe: shows the keys in use on the "Keys" button."""
         self.root.after(0, self._update_keys_button)
 
+    def show_update(self, version: str) -> None:
+        """Thread-safe: says over the page that Rick `version` is out, with a
+        link to its download page. The ✕ hides it until Rick's next start."""
+
+        def _do() -> None:
+            self._update_link.configure(text=self._t["update_notice"].format(new=version, current=__version__))
+            if not self._update_banner.winfo_manager():
+                self._update_banner.pack(fill="x", padx=24, pady=(0, 8), before=self._update_above)
+
+        self.root.after(0, _do)
+
     def _activate_game(self, game: str) -> None:
         """Makes `game` the active binder: new questions get saved under it,
         and its saved history is loaded into the page. An empty/blank name
@@ -681,6 +720,12 @@ class BookWindow:
         if self._on_close:
             self._on_close()
         self.root.destroy()
+
+    def when_running(self, fn) -> None:
+        """Calls `fn` on the Tk thread once run() has the window going.
+        Threads started from there can use the thread-safe methods above at
+        once: before mainloop runs, Tkinter refuses calls from other threads."""
+        self.root.after(0, fn)
 
     def run(self) -> None:
         self.root.mainloop()
