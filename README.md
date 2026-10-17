@@ -221,15 +221,23 @@ Rick will ask for them again next time it starts.
 
 ## Making Rick faster (free)
 
-Rick is already tuned for short, fast answers by default. The speech
-recognition model loads as soon as Rick starts, so the first question is as
-quick as the others.
+Rick is already tuned for short, fast answers by default:
+
+- the speech recognition model loads as soon as Rick starts, so the first
+  question is as quick as the others;
+- Rick starts talking as soon as the first sentence of the answer is ready,
+  while Gemini is still writing the rest, and each next sentence is turned
+  into voice while the one before it plays. The written answer appears in
+  the book once it's complete.
 
 To see which step slows an answer down on your PC, open `rick.log` (in the
-`.rick` folder inside your user folder): for every answer, an
-`Answer timings` line says how many seconds went to transcription, to the
-answer (web search and Gemini, split on the line before it) and to
-preparing the voice.
+`.rick` folder inside your user folder). For every answer, an
+`Answer timings` line says how many seconds went to:
+
+- transcription;
+- the first sentence of the answer (web search and Gemini, split on the
+  `Answer:` line next to it);
+- its voice.
 
 If you still need more speed, these levers are all free:
 
@@ -594,15 +602,23 @@ cancella quel file e Rick te le richiedera' di nuovo al prossimo avvio.
 
 ## Velocizzare Rick (gratis)
 
-Rick e' gia' ottimizzato per risposte brevi e veloci di default. Il modello
-che riconosce la voce si carica appena Rick parte, cosi' anche la prima
-domanda e' veloce come le altre.
+Rick e' gia' ottimizzato per risposte brevi e veloci di default:
+
+- il modello che riconosce la voce si carica appena Rick parte, cosi' anche
+  la prima domanda e' veloce come le altre;
+- Rick inizia a parlare appena e' pronta la prima frase della risposta,
+  mentre Gemini sta ancora scrivendo il resto, e ogni frase successiva
+  diventa voce mentre suona quella prima. La risposta scritta compare nel
+  libro quando e' completa.
 
 Per capire quale passaggio rallenta una risposta sul tuo PC, apri
-`rick.log` (nella cartella `.rick` dentro la tua cartella utente): per ogni
-risposta, una riga `Answer timings` dice quanti secondi sono serviti per la
-trascrizione, per la risposta (ricerca web e Gemini, divisi nella riga
-prima) e per preparare la voce.
+`rick.log` (nella cartella `.rick` dentro la tua cartella utente). Per ogni
+risposta, una riga `Answer timings` dice quanti secondi sono serviti per:
+
+- la trascrizione;
+- la prima frase della risposta (ricerca web e Gemini, divisi nella riga
+  `Answer:` accanto);
+- la sua voce.
 
 Se hai ancora bisogno di piu' velocita', queste leve sono tutte gratuite:
 

@@ -90,15 +90,24 @@ class FakeRick:
     def __init__(self):
         self.asked = []
         self.error = None
-        self.gate = None  # a threading.Event to hold ask() "thinking"
+        self.gate = None  # a threading.Event to hold ask_stream() "thinking"
+        # what ask_stream() yields: pieces of text, or an Event to wait for
+        # (Gemini still writing), or an exception (Gemini failing half-way)
+        self.pieces = [ANSWER[:10], ANSWER[10:]]
 
-    def ask(self, question, game=""):
+    def ask_stream(self, question, game=""):
         self.asked.append((question, game))
         if self.gate is not None:
-            assert self.gate.wait(5), "test never released ask()"
+            assert self.gate.wait(5), "test never released ask_stream()"
         if self.error is not None:
             raise self.error
-        return ANSWER
+        for piece in self.pieces:
+            if isinstance(piece, BaseException):
+                raise piece
+            if isinstance(piece, threading.Event):
+                assert piece.wait(5), "test never let Gemini go on"
+                continue
+            yield piece
 
     def reset_conversation(self):
         pass
@@ -349,6 +358,68 @@ class AppTest(AppHarness):
         self.press()
         self.assertEqual(self.book.status, self.recording())
 
+class StreamingTest(AppHarness):
+    """Rick starts talking at the first sentence, while Gemini is still
+    writing the rest of the answer."""
+
+    FIRST = "Lo trovi nella palude a nord del castello."
+    SECOND = "Attento al drago che fa la guardia."
+
+    def setUp(self):
+        super().setUp()
+        self.gemini_goes_on = threading.Event()
+        self.rick.pieces = [self.FIRST[:12], self.FIRST[12:] + " ", self.gemini_goes_on, self.SECOND]
+
+    def test_the_first_sentence_is_said_before_gemini_has_finished(self):
+        self.ask_one_question()
+        self.assertTrue(wait_until(lambda: self.speaker.spoken == [self.FIRST]))
+        self.assertTrue(self.speaker.playing.wait(5))
+        self.assertEqual(self.book.status, app._t("status_speaking"))
+        self.assertEqual(self.book.turns, [])  # not complete yet
+        self.gemini_goes_on.set()
+        self.wait_for_status(self.ready())
+        self.assertEqual(self.speaker.spoken, [self.FIRST, self.SECOND])
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, f"{self.FIRST} {self.SECOND}")])
+        self.assert_no_temp_files_left()
+
+    def test_interrupted_rick_says_no_more_but_the_answer_is_saved(self):
+        self.speaker.block = True
+        self.ask_one_question()
+        self.assertTrue(self.speaker.playing.wait(5))
+        self.press()  # speaking -> recording
+        self.gemini_goes_on.set()
+        self.join_worker(0)
+        self.assertEqual(self.speaker.spoken, [self.FIRST])  # the rest isn't said
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, f"{self.FIRST} {self.SECOND}")])
+        self.assertEqual(self.book.status, self.recording())
+        self.assert_no_temp_files_left()
+
+    def test_gemini_failing_half_way_is_explained_and_not_saved(self):
+        self.rick.pieces = [self.FIRST + " ", RuntimeError("Gemini cut off")]
+        self.ask_one_question()
+        expected = app._error_status(RuntimeError("Gemini cut off"), self.key_label)
+        self.wait_for_status(expected)
+        self.assertEqual(self.speaker.spoken, [self.FIRST, app._t("error_speech")])
+        self.assertEqual(self.book.turns, [])
+        self.assert_no_temp_files_left()
+
+    def test_a_voice_failing_half_way_leaves_no_files(self):
+        self.gemini_goes_on.set()
+        real = self.speaker.synthesize
+
+        def second_fails(text):
+            if text == self.SECOND:
+                raise OSError("voice service gone")
+            return real(text)
+
+        self.speaker.synthesize = second_fails
+        with mock.patch.object(app, "synthesize", second_fails):
+            self.ask_one_question()
+            self.wait_for_status(app._error_status(OSError("voice service gone"), self.key_label))
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, f"{self.FIRST} {self.SECOND}")])
+        self.assert_no_temp_files_left()
+
+
 class SpeedTest(AppHarness):
     def test_the_speech_model_loads_at_start_not_at_the_first_question(self):
         self.assertEqual(self.preloads, [True])
@@ -359,7 +430,7 @@ class SpeedTest(AppHarness):
             self.ask_one_question()
             self.wait_for_status(self.ready())
         (line,) = [message for message in logged.output if "Answer timings" in message]
-        for step in ("transcription", "answer", "voice", "after the second beep"):
+        for step in ("transcription", "first sentence", "its voice", "after the second beep"):
             self.assertIn(step, line)
 
     def test_nothing_heard_logs_no_timings(self):

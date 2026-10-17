@@ -18,18 +18,31 @@ def _client_error():
 
 class FakeModels:
     """Stands in for client.models: records every request, answers from a
-    script (a string, None for "no text", or an exception to raise)."""
+    script, one item per request: a string (streamed a few characters at a
+    time), None for "no text", an exception to raise, or a list of those to
+    stream one after the other (an exception in it fails half-way)."""
 
     def __init__(self):
         self.requests = []
         self.script = []
 
-    def generate_content(self, model, contents, config):
+    def generate_content_stream(self, model, contents, config):
         self.requests.append(contents)
         item = self.script.pop(0) if self.script else "Risposta."
-        if isinstance(item, BaseException):
-            raise item
-        return mock.Mock(text=item)
+        return self._stream(item if isinstance(item, list) else [item])
+
+    @staticmethod
+    def _stream(items):
+        # a generator, like the SDK's: nothing happens before the first chunk
+        # is asked for, and that's when a failed request raises
+        for item in items:
+            if isinstance(item, BaseException):
+                raise item
+            if item is None:
+                yield mock.Mock(text=None)
+                continue
+            for start in range(0, len(item), 7):
+                yield mock.Mock(text=item[start : start + 7])
 
 
 class BrainTest(unittest.TestCase):
@@ -193,13 +206,51 @@ class TimingsTest(unittest.TestCase):
     def test_search_and_gemini_times_are_logged(self):
         with mock.patch.object(config, "ENABLE_WEB_SEARCH", True), self.assertLogs(brain.log, "INFO") as logged:
             self.rick.ask("dove trovo la chiave?", "Elden Ring")
-        self.assertRegex(logged.output[-1], r"Answer: web search \d+\.\ds, Gemini \d+\.\ds \(attempt 1\)")
+        self.assertRegex(
+            logged.output[-1], r"Answer: web search \d+\.\ds, Gemini first words \d+\.\ds, whole answer \d+\.\ds \(attempt 1\)"
+        )
 
     def test_retries_are_counted(self):
         self.models.script = [_server_error(), "Eccola."]
         with self.assertLogs(brain.log, "INFO") as logged:
             self.assertEqual(self.rick.ask("dove trovo la chiave?"), "Eccola.")
-        self.assertRegex(logged.output[-1], r"Answer: Gemini \d+\.\ds \(attempt 2\)")
+        self.assertRegex(logged.output[-1], r"Answer: Gemini first words .*\(attempt 2\)")
+
+
+
+class StreamTest(unittest.TestCase):
+    """The answer arrives a piece at a time (app.py speaks it from the first
+    sentence on), and the conversation only keeps a complete one."""
+
+    setUp = BrainTest.setUp
+
+    def test_pieces_come_as_gemini_writes_them(self):
+        self.models.script = ["Prima frase. Seconda frase."]
+        pieces = list(self.rick.ask_stream("domanda", "Gioco A"))
+        self.assertGreater(len(pieces), 1)
+        self.assertEqual("".join(pieces), "Prima frase. Seconda frase.")
+        self.rick.ask("ancora", "Gioco A")
+        request = self.models.requests[-1]
+        self.assertEqual(request[1].parts[0].text, "Prima frase. Seconda frase.")  # remembered whole
+
+    def test_an_answer_cut_half_way_is_forgotten_with_its_question(self):
+        self.models.script = [["Prima frase. ", _server_error()]]
+        with self.assertRaises(genai_errors.ServerError):
+            for _piece in self.rick.ask_stream("domanda", "Gioco A"):
+                pass
+        self.assertEqual(len(self.models.requests), 1)  # not retried: Rick had started talking
+        self.rick.ask("di nuovo", "Gioco A")
+        self.assertEqual(self.roles(self.last_request()), ["user"])
+
+    def test_a_stream_closed_early_is_forgotten_and_frees_the_conversation(self):
+        stream = self.rick.ask_stream("domanda", "Gioco A")
+        next(stream)
+        stream.close()
+        self.assertEqual(self.rick.ask("di nuovo", "Gioco A"), "Risposta.")  # not stuck on the lock
+        self.assertEqual(self.roles(self.last_request()), ["user"])
+
+    last_request = BrainTest.last_request
+    roles = BrainTest.roles
 
 
 if __name__ == "__main__":

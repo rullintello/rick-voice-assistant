@@ -1,7 +1,9 @@
 import logging
 import os
+import queue
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import keyboard
 
@@ -9,6 +11,7 @@ from . import __version__, config, hotkeys, updates, userdata
 from .audio import Recorder, arm_playback, chime_start, chime_stop, interrupt_playback, play_audio
 from .brain import Rick
 from .gui import BookWindow
+from .sentences import sentences
 from .startup import describe_error, show_error_dialog
 from .stt import preload_in_background, transcribe
 from .tts import synthesize
@@ -193,42 +196,100 @@ def main() -> None:
                 state["stage"] = "idle"
                 book.set_status(status or ready_status())
 
-    def speak(text: str, turn: int, timings: dict | None = None) -> None:
-        """Unico punto che fa "parlare" Rick: sintetizza, passa a "speaking"
-        solo se il turno e' ancora nostro, riproduce, e ripulisce sempre il
-        file temporaneo. Usato sia per le risposte normali sia per i messaggi
-        di errore/silenzio, cosi' la transizione di stato non va duplicata
-        (e potenzialmente dimenticata) in piu' punti. `timings`: i tempi della
-        risposta finora, scritti nel log appena la voce e' pronta."""
-        path = None
-        try:
-            voice_started = time.monotonic()
-            path = synthesize(text)
-            if timings is not None:
-                timings["voice"] = time.monotonic() - voice_started
-                log_timings(timings)
-            with lock:
-                if state["turn"] != turn:
-                    return  # interrotto/riavviato nel frattempo
-                state["stage"] = "speaking"
-                # sotto lo stesso lock di on_hotkey: un'interruzione arriva
-                # per forza dopo, quindi non puo' venire annullata da questa
-                arm_playback()
-                book.set_status(_t("status_speaking"))
-            play_audio(path)
-        finally:
-            if path and os.path.exists(path):
-                os.remove(path)
+    def speak(pieces, turn: int, timings: dict | None = None) -> None:
+        """Unico punto che fa "parlare" Rick. `pieces`: cosa dire, a pezzi:
+        le frasi della risposta mentre Gemini la sta ancora scrivendo, o un
+        messaggio intero ([testo]). Un aiutante legge i pezzi e li fa
+        diventare voce uno dopo l'altro, cosi' il prossimo e' pronto mentre
+        questo suona; qui si suonano in ordine (play_in_order). Passa a
+        "speaking" solo se il turno e' ancora nostro, smette appena cambia
+        (Rick interrotto) e ripulisce sempre i file temporanei. Usato sia per
+        le risposte sia per i messaggi di errore/silenzio, cosi' la
+        transizione di stato non va duplicata in piu' punti. Un errore di
+        Gemini o della voce arriva al chiamante, dopo le frasi gia' dette.
+        `timings`: i tempi della risposta finora, scritti nel log appena la
+        prima frase e' pronta da dire."""
+        voices: queue.Queue = queue.Queue()  # each piece's voice being made, in order; then None
+        stop = threading.Event()  # interrupted, or failed: no more voices to make
 
-    def log_timings(timings: dict) -> None:
+        def make_voices(voice_maker) -> None:
+            try:
+                # read to the end even once stopped: the answer still gets
+                # saved in its binder (see answer()). Once Rick has been
+                # interrupted (the turn changed), the rest isn't turned into
+                # voice either: it wouldn't be said.
+                for piece in pieces:
+                    if not stop.is_set() and state["turn"] == turn:
+                        voices.put(voice_maker.submit(synthesize, piece))
+            finally:
+                voices.put(None)
+
+        try:
+            # the reader is shut down (waited for) first: it may still hand
+            # pieces to the voice maker until then
+            with ThreadPoolExecutor(1, "voice") as voice_maker, ThreadPoolExecutor(1, "answer") as reader:
+                reading = reader.submit(make_voices, voice_maker)
+                try:
+                    play_in_order(voices, turn, timings)
+                finally:
+                    stop.set()
+            reading.result()  # Gemini's error, if it stopped half-way
+        finally:
+            # voices made but never played (interrupted, or an error)
+            while not voices.empty():
+                voice = voices.get_nowait()
+                if voice is not None and voice.exception() is None:
+                    remove_file(voice.result())
+
+    def play_in_order(voices: queue.Queue, turn: int, timings: dict | None) -> None:
+        first = True
+        while (voice := voices.get()) is not None:
+            sentence_ready = time.monotonic()
+            path = voice.result()  # the voice's error, if it failed
+            try:
+                with lock:
+                    if state["turn"] != turn:
+                        return  # interrotto/riavviato nel frattempo
+                    if first:
+                        state["stage"] = "speaking"
+                        # sotto lo stesso lock di on_hotkey: un'interruzione arriva
+                        # per forza dopo, quindi non puo' venire annullata da questa.
+                        # Solo alla prima frase: per le altre un'interruzione resta
+                        # valida, e il turno cambiato le ferma qui sopra.
+                        arm_playback()
+                        book.set_status(_t("status_speaking"))
+                if first and timings is not None:
+                    log_timings(timings, sentence_ready)
+                first = False
+                play_audio(path)
+            finally:
+                remove_file(path)
+
+    def remove_file(path: str) -> None:
+        if path and os.path.exists(path):
+            os.remove(path)
+
+    def log_timings(timings: dict, sentence_ready: float) -> None:
         # in rick.log, to see which step makes an answer slow on this PC
+        now = time.monotonic()
         logging.info(
-            "Answer timings: transcription %.1fs, answer %.1fs, voice %.1fs: Rick talks %.1fs after the second beep",
+            "Answer timings: transcription %.1fs, first sentence %.1fs, its voice %.1fs: "
+            "Rick talks %.1fs after the second beep",
             timings["transcription"],
-            timings["answer"],
-            timings["voice"],
-            time.monotonic() - timings["beep"],
+            sentence_ready - timings["asked"],
+            now - sentence_ready,
+            now - timings["beep"],
         )
+
+    def answer(question: str, game: str):
+        """Rick's answer to `question`, a piece at a time as Gemini writes
+        it; once it's complete, also written in `game`'s binder (even when
+        Rick was interrupted before saying it all)."""
+        parts = []
+        for piece in rick.ask_stream(question, game):
+            parts.append(piece)
+            yield piece
+        book.append_turn(game, question, "".join(parts).strip())
 
     def process_recording(turn: int) -> None:
         wav_path = None
@@ -242,19 +303,18 @@ def main() -> None:
             timings["transcription"] = time.monotonic() - timings["beep"]
             if not question:
                 show_status(turn, _t("status_nothing_heard"))
-                speak(_t("status_nothing_heard"), turn)
+                speak([_t("status_nothing_heard")], turn)
                 return
 
-            # capturing the active game now (not after rick.ask() returns)
-            # so switching games while Rick is thinking can't file this
-            # answer under the wrong binder
+            # capturing the active game now (not once the answer is
+            # complete) so switching games while Rick is thinking can't
+            # file this answer under the wrong binder
             game = book.current_game()
             show_status(turn, _t("status_thinking"))
-            asked = time.monotonic()
-            answer = rick.ask(question, game)
-            timings["answer"] = time.monotonic() - asked
-            book.append_turn(game, question, answer)
-            speak(answer, turn, timings)
+            timings["asked"] = time.monotonic()
+            # Rick starts talking at the first sentence, while Gemini is
+            # still writing the rest
+            speak(sentences(answer(question, game)), turn, timings)
         except Exception as exc:  # keep the assistant alive across errors
             logging.exception("Error handling a turn")
             # stays in the status bar after the spoken apology, until the
@@ -262,7 +322,7 @@ def main() -> None:
             final_status = _error_status(exc, shortcut.label)
             show_status(turn, final_status)
             try:
-                speak(_t("error_speech"), turn)
+                speak([_t("error_speech")], turn)
             except Exception:
                 logging.exception("Error while trying to speak the error message")
         finally:

@@ -1,3 +1,4 @@
+import itertools
 import logging
 import threading
 import time
@@ -91,6 +92,15 @@ class Rick:
         self._reset_requested = True
 
     def ask(self, question: str, game: str = "") -> str:
+        """Rick's whole answer at once (see ask_stream)."""
+        return "".join(self.ask_stream(question, game)).strip()
+
+    def ask_stream(self, question: str, game: str = ""):
+        """Rick's answer as Gemini writes it, a piece at a time, so that it
+        can be spoken from its first sentence on (see app.py). The
+        conversation keeps the answer once it's complete. Read it to the end,
+        or close it: until then it holds the conversation, and the next
+        question waits."""
         with self._lock:
             if self._reset_requested or game != self._history_game:
                 self._history = []
@@ -100,10 +110,11 @@ class Rick:
             self._history.append(_user_turn(question))
             self._trim_history()
             try:
-                return self._ask_locked(question, game)
+                yield from self._stream_locked(question, game)
             except BaseException:
-                # Drop the question that got no answer, so the conversation
-                # keeps alternating user/model instead of stacking user turns.
+                # Drop the question that got no answer (or only half of
+                # one), so the conversation keeps alternating user/model
+                # instead of stacking user turns.
                 if self._history and self._history[-1].role == "user":
                     self._history.pop()
                 raise
@@ -149,7 +160,7 @@ class Rick:
         lines = "\n".join(f"{q_label}: {e['question']}\n{a_label}: {e['answer']}" for e in saved)
         return f"\n\n[{_SAVED_HISTORY_LABEL[language]}]\n{lines}"
 
-    def _ask_locked(self, question: str, game: str) -> str:
+    def _stream_locked(self, question: str, game: str):
         language = config.get_language()
         contents = list(self._history)
         extra_sections = self._saved_history_section(game, language)
@@ -182,26 +193,51 @@ class Rick:
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.MINIMAL),
         )
 
-        last_exc: genai_errors.APIError | None = None
         asked = time.monotonic()
+        chunks, attempt = self._open_stream(contents, gen_config)
+        parts = []
+        first_words = 0.0
+        for chunk in chunks:
+            text = chunk.text  # None for a chunk without text
+            if not text:
+                continue
+            if not parts:
+                first_words = time.monotonic() - asked
+            parts.append(text)
+            yield text
+
+        answer = "".join(parts).strip()
+        if not answer:
+            raise EmptyAnswerError(_EMPTY_ANSWER[language])
+        # in rick.log, next to app.py's timings for the whole answer
+        log.info(
+            "Answer: %sGemini first words %.1fs, whole answer %.1fs (attempt %d)",
+            timings,
+            first_words,
+            time.monotonic() - asked,
+            attempt + 1,
+        )
+        self._history.append(types.Content(role="model", parts=[types.Part(text=answer)]))
+
+    def _open_stream(self, contents, gen_config):
+        """Gemini's answer as a stream of chunks, and which attempt it took
+        (from 0). An overload is retried only here, before the first chunk:
+        once Rick has started saying the answer, it can't start over."""
+        last_exc: genai_errors.APIError | None = None
         for attempt in range(_MAX_RETRIES + 1):
+            # the request goes out when the first chunk is asked for
+            stream = self._client.models.generate_content_stream(
+                model=config.GEMINI_MODEL, contents=contents, config=gen_config
+            )
             try:
-                response = self._client.models.generate_content(
-                    model=config.GEMINI_MODEL, contents=contents, config=gen_config
-                )
-                break
+                first = next(stream)
+            except StopIteration:
+                return iter(()), attempt
             except genai_errors.APIError as exc:
                 if exc.code not in _RETRYABLE_CODES or attempt == _MAX_RETRIES:
                     raise
                 last_exc = exc
                 time.sleep(_RETRY_DELAY_SECONDS * (attempt + 1))
-        else:
-            raise last_exc  # pragma: no cover - loop always breaks or raises above
-
-        # the split of app.py's "answer" time, in rick.log
-        log.info("Answer: %sGemini %.1fs (attempt %d)", timings, time.monotonic() - asked, attempt + 1)
-        answer = (response.text or "").strip()
-        if not answer:
-            raise EmptyAnswerError(_EMPTY_ANSWER[language])
-        self._history.append(types.Content(role="model", parts=[types.Part(text=answer)]))
-        return answer
+                continue
+            return itertools.chain([first], stream), attempt
+        raise last_exc  # pragma: no cover - the loop always returns or raises above
