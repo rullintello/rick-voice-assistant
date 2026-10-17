@@ -15,6 +15,8 @@ from . import config, history, search
 # logger keeps real errors from it visible.
 logging.getLogger("google_genai.models").setLevel(logging.ERROR)
 
+log = logging.getLogger(__name__)
+
 # Gemini occasionally returns these for a few seconds under heavy load
 # ("high demand ... usually temporary" per Google's own error message) -
 # a short retry clears most of them instead of failing the whole turn.
@@ -152,12 +154,15 @@ class Rick:
         contents = list(self._history)
         extra_sections = self._saved_history_section(game, language)
 
+        timings = ""
         if config.ENABLE_WEB_SEARCH:
             # "silver key" alone finds (and caches) results for whichever game
             # ranks first - the game name makes both the search and its cache
             # entry specific to the game actually being played.
             query = question if history.is_untitled(game) else f"{game} {question}"
+            searched = time.monotonic()
             web_context = search.search_web(query)
+            timings = f"web search {time.monotonic() - searched:.1f}s, "
             if web_context:
                 extra_sections += f"\n\n[{_WEB_RESULTS_LABEL[language]}]\n{web_context}"
 
@@ -178,6 +183,7 @@ class Rick:
         )
 
         last_exc: genai_errors.APIError | None = None
+        asked = time.monotonic()
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 response = self._client.models.generate_content(
@@ -192,6 +198,8 @@ class Rick:
         else:
             raise last_exc  # pragma: no cover - loop always breaks or raises above
 
+        # the split of app.py's "answer" time, in rick.log
+        log.info("Answer: %sGemini %.1fs (attempt %d)", timings, time.monotonic() - asked, attempt + 1)
         answer = (response.text or "").strip()
         if not answer:
             raise EmptyAnswerError(_EMPTY_ANSWER[language])

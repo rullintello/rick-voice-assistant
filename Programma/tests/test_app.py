@@ -4,6 +4,7 @@ on_hotkey(), while each question is handled on app.py's own worker thread.
 Microphone, speakers, Whisper, Gemini, the voice and the window are all
 fakes, so these run anywhere - no display, no audio device, no network."""
 
+import logging
 import os
 import tempfile
 import threading
@@ -163,6 +164,7 @@ class AppHarness(unittest.TestCase):
         self.registered = {}
         self.hotkey_attempts = []
         self.workers = []
+        self.preloads = []
 
         self.unknown_to_keyboard = {"ctrl+nosuchkey"}
 
@@ -192,6 +194,7 @@ class AppHarness(unittest.TestCase):
             "interrupt_playback": self.speaker.interrupt_playback,
             "chime_start": lambda: None,
             "chime_stop": lambda: None,
+            "preload_in_background": lambda: self.preloads.append(True),
         }
         for name, value in patches.items():
             patcher = mock.patch.object(app, name, value)
@@ -345,6 +348,28 @@ class AppTest(AppHarness):
         self.speaker.block = False
         self.press()
         self.assertEqual(self.book.status, self.recording())
+
+class SpeedTest(AppHarness):
+    def test_the_speech_model_loads_at_start_not_at_the_first_question(self):
+        self.assertEqual(self.preloads, [True])
+
+    def test_each_steps_time_is_logged(self):
+        # rick.log then says which step makes answers slow on that PC
+        with self.assertLogs(level="INFO") as logged:
+            self.ask_one_question()
+            self.wait_for_status(self.ready())
+        (line,) = [message for message in logged.output if "Answer timings" in message]
+        for step in ("transcription", "answer", "voice", "after the second beep"):
+            self.assertIn(step, line)
+
+    def test_nothing_heard_logs_no_timings(self):
+        self.question = ""
+        with self.assertLogs(level="INFO") as logged:
+            logging.info("start")  # assertLogs needs at least one line
+            self.ask_one_question()
+            self.wait_for_status(self.ready())
+        self.assertFalse([message for message in logged.output if "Answer timings" in message])
+
 
 class UpdateCheckTest(AppHarness):
     """The check for a newer Rick (rick/updates.py) starts with the window

@@ -221,8 +221,17 @@ Rick will ask for them again next time it starts.
 
 ## Making Rick faster (free)
 
-Rick is already tuned for short, fast answers by default, but if you still
-need more speed, these levers are all free:
+Rick is already tuned for short, fast answers by default. The speech
+recognition model loads as soon as Rick starts, so the first question is as
+quick as the others.
+
+To see which step slows an answer down on your PC, open `rick.log` (in the
+`.rick` folder inside your user folder): for every answer, an
+`Answer timings` line says how many seconds went to transcription, to the
+answer (web search and Gemini, split on the line before it) and to
+preparing the voice.
+
+If you still need more speed, these levers are all free:
 
 - **GPU for transcription**: if you have an Nvidia GPU with CUDA/cuDNN
   installed, set `RICK_WHISPER_DEVICE=cuda` in `.env` — transcription
@@ -585,8 +594,17 @@ cancella quel file e Rick te le richiedera' di nuovo al prossimo avvio.
 
 ## Velocizzare Rick (gratis)
 
-Rick e' gia' ottimizzato per risposte brevi e veloci di default, ma se hai
-ancora bisogno di piu' velocita', queste leve sono tutte gratuite:
+Rick e' gia' ottimizzato per risposte brevi e veloci di default. Il modello
+che riconosce la voce si carica appena Rick parte, cosi' anche la prima
+domanda e' veloce come le altre.
+
+Per capire quale passaggio rallenta una risposta sul tuo PC, apri
+`rick.log` (nella cartella `.rick` dentro la tua cartella utente): per ogni
+risposta, una riga `Answer timings` dice quanti secondi sono serviti per la
+trascrizione, per la risposta (ricerca web e Gemini, divisi nella riga
+prima) e per preparare la voce.
+
+Se hai ancora bisogno di piu' velocita', queste leve sono tutte gratuite:
 
 - **GPU per la trascrizione**: se hai una scheda video Nvidia con CUDA/cuDNN
   installati, imposta `RICK_WHISPER_DEVICE=cuda` in `.env` — la trascrizione

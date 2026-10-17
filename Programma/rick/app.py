@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 
 import keyboard
 
@@ -9,7 +10,7 @@ from .audio import Recorder, arm_playback, chime_start, chime_stop, interrupt_pl
 from .brain import Rick
 from .gui import BookWindow
 from .startup import describe_error, show_error_dialog
-from .stt import transcribe
+from .stt import preload_in_background, transcribe
 from .tts import synthesize
 
 STRINGS = {
@@ -144,6 +145,9 @@ class Shortcut:
 def main() -> None:
     logging.info("Rick %s starting", __version__)
     userdata.purge_leftover_temp_files()
+    # first thing: it loads while the first-run window asks for the keys, and
+    # while the player gets to the first question
+    preload_in_background()
     ensure_api_keys()
 
     rick = Rick()
@@ -189,15 +193,20 @@ def main() -> None:
                 state["stage"] = "idle"
                 book.set_status(status or ready_status())
 
-    def speak(text: str, turn: int) -> None:
+    def speak(text: str, turn: int, timings: dict | None = None) -> None:
         """Unico punto che fa "parlare" Rick: sintetizza, passa a "speaking"
         solo se il turno e' ancora nostro, riproduce, e ripulisce sempre il
         file temporaneo. Usato sia per le risposte normali sia per i messaggi
         di errore/silenzio, cosi' la transizione di stato non va duplicata
-        (e potenzialmente dimenticata) in piu' punti."""
+        (e potenzialmente dimenticata) in piu' punti. `timings`: i tempi della
+        risposta finora, scritti nel log appena la voce e' pronta."""
         path = None
         try:
+            voice_started = time.monotonic()
             path = synthesize(text)
+            if timings is not None:
+                timings["voice"] = time.monotonic() - voice_started
+                log_timings(timings)
             with lock:
                 if state["turn"] != turn:
                     return  # interrotto/riavviato nel frattempo
@@ -211,14 +220,26 @@ def main() -> None:
             if path and os.path.exists(path):
                 os.remove(path)
 
+    def log_timings(timings: dict) -> None:
+        # in rick.log, to see which step makes an answer slow on this PC
+        logging.info(
+            "Answer timings: transcription %.1fs, answer %.1fs, voice %.1fs: Rick talks %.1fs after the second beep",
+            timings["transcription"],
+            timings["answer"],
+            timings["voice"],
+            time.monotonic() - timings["beep"],
+        )
+
     def process_recording(turn: int) -> None:
         wav_path = None
         final_status = None
         try:
             wav_path = recorder.stop()
             chime_stop()
+            timings = {"beep": time.monotonic()}
             show_status(turn, _t("status_transcribing"))
             question = transcribe(wav_path)
+            timings["transcription"] = time.monotonic() - timings["beep"]
             if not question:
                 show_status(turn, _t("status_nothing_heard"))
                 speak(_t("status_nothing_heard"), turn)
@@ -229,9 +250,11 @@ def main() -> None:
             # answer under the wrong binder
             game = book.current_game()
             show_status(turn, _t("status_thinking"))
+            asked = time.monotonic()
             answer = rick.ask(question, game)
+            timings["answer"] = time.monotonic() - asked
             book.append_turn(game, question, answer)
-            speak(answer, turn)
+            speak(answer, turn, timings)
         except Exception as exc:  # keep the assistant alive across errors
             logging.exception("Error handling a turn")
             # stays in the status bar after the spoken apology, until the

@@ -184,5 +184,23 @@ class BrainTest(unittest.TestCase):
         self.assertEqual(self.rick._history[0].parts[0].text, "nuova")
 
 
+
+class TimingsTest(unittest.TestCase):
+    """rick.log says how the answer's time splits between search and Gemini."""
+
+    setUp = BrainTest.setUp  # the same fakes, without running BrainTest's tests again
+
+    def test_search_and_gemini_times_are_logged(self):
+        with mock.patch.object(config, "ENABLE_WEB_SEARCH", True), self.assertLogs(brain.log, "INFO") as logged:
+            self.rick.ask("dove trovo la chiave?", "Elden Ring")
+        self.assertRegex(logged.output[-1], r"Answer: web search \d+\.\ds, Gemini \d+\.\ds \(attempt 1\)")
+
+    def test_retries_are_counted(self):
+        self.models.script = [_server_error(), "Eccola."]
+        with self.assertLogs(brain.log, "INFO") as logged:
+            self.assertEqual(self.rick.ask("dove trovo la chiave?"), "Eccola.")
+        self.assertRegex(logged.output[-1], r"Answer: Gemini \d+\.\ds \(attempt 2\)")
+
+
 if __name__ == "__main__":
     unittest.main()

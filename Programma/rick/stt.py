@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 
 from . import config
 
@@ -36,6 +37,35 @@ def _load_local_model():
         # logged, not printed: Rick runs with no console (pythonw)
         log.warning("GPU unavailable for transcription, using the CPU", exc_info=True)
         return WhisperModel(config.WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+
+
+def preload() -> None:
+    """Gets the speech model ready before the first question: loading it
+    takes seconds on a CPU (more the first time, while Windows scans the
+    freshly installed libraries, and much more on the very first start,
+    when it's downloaded), which the player would otherwise wait through
+    after their first question. A second of silence also loads the filter
+    that skips silence (vad_filter below), without running Whisper itself.
+    A failure is only logged: the first question tries again and says why."""
+    started = time.monotonic()
+    try:
+        import numpy as np
+
+        segments, _info = _get_local_model().transcribe(
+            np.zeros(16000, dtype=np.float32), language=config.get_language(), vad_filter=True
+        )
+        list(segments)
+    except Exception:
+        log.warning("Couldn't get the speech model ready in advance", exc_info=True)
+        return
+    log.info("Speech model ready in %.1fs", time.monotonic() - started)
+
+
+def preload_in_background() -> threading.Thread:
+    """preload() on its own thread, which ends with Rick."""
+    thread = threading.Thread(target=preload, name="speech-model", daemon=True)
+    thread.start()
+    return thread
 
 
 def transcribe(wav_path: str) -> str:
