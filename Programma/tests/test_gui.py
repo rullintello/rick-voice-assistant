@@ -3,12 +3,15 @@ buttons, and answers that arrive while the player is changing binders.
 Opens real Tk windows, so it needs a display (skipped automatically
 without one; on a headless Linux box run the suite under xvfb-run)."""
 
+import threading
 import unittest
 from unittest import mock
 
-from rick import config, gui, history
+import rick
+from rick import config, gui, history, hotkeys, updates
 
-from support import call_on_tk, flush, isolate_rick_home, require_display, run_with_mainloop
+from support import call_on_tk, flush, free_tk_after_test, isolate_rick_home, require_display, run_with_mainloop
+from test_hotkey_picker import press
 
 
 class GuiTestCase(unittest.TestCase):
@@ -21,9 +24,15 @@ class GuiTestCase(unittest.TestCase):
         opened = mock.patch.object(gui.webbrowser, "open")
         self.browser_open = opened.start()
         self.addCleanup(opened.stop)
-        self.book = gui.BookWindow(language=self.language, on_new_chat=self.count_new_chat)
+        self.book = gui.BookWindow(
+            language=self.language, on_new_chat=self.count_new_chat, shortcut=self.make_shortcut()
+        )
+        free_tk_after_test(self, "book")
         self.addCleanup(self.book.root.destroy)
         self.pump()
+
+    def make_shortcut(self):
+        return None  # no "Keys" button, unless a test class gives one
 
     def count_new_chat(self):
         self.new_chats += 1
@@ -359,6 +368,204 @@ class MissingPortraitTest(GuiTestCase):
         self.assertEqual(packed_images, [])
         self.answer(history.NO_GAME_KEY_IT, "q")
         self.assertIn("q", self.page())
+
+
+class FakeShortcut:
+    """Stands in for app.Shortcut: the keys Rick listens on."""
+
+    def __init__(self, keys="alt+r", locked=False, works=True):
+        self.keys, self.locked, self.works = keys, locked, works
+        self.paused = []
+        self.changes = []
+
+    @property
+    def label(self):
+        return hotkeys.label(self.keys)
+
+    def pause(self, paused):
+        self.paused.append(paused)
+
+    def change(self, keys):
+        self.changes.append(keys)
+        if self.works:
+            self.keys = keys
+        return self.works
+
+
+class KeysButtonTest(GuiTestCase):
+    """The "Keys" button: new keys picked in a small window, in use at once."""
+
+    def make_shortcut(self):
+        self.shortcut = FakeShortcut()
+        return self.shortcut
+
+    def button_text(self):
+        return self.book._keys_button.cget("text")
+
+    def open_dialog(self):
+        self.book._keys_button.invoke()
+        self.pump()
+        return self.book._keys_dialog
+
+    def test_button_shows_the_keys_in_use(self):
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Alt+R")
+
+    def test_picking_and_saving_switches_the_keys(self):
+        dialog = self.open_dialog()
+        self.assertEqual(self.shortcut.paused, [True])  # Alt+R can't start a recording meanwhile
+        self.assertTrue(dialog["picker"].capturing)  # ready for the keys straight away
+        self.assertEqual(dialog["save"].cget("state"), "disabled")
+        press(dialog["picker"], "Control_L", "Shift_L", "F9")
+        self.assertEqual(dialog["save"].cget("state"), "normal")
+        dialog["save"].invoke()
+        self.pump()
+        self.assertEqual(self.shortcut.changes, ["ctrl+shift+f9"])
+        self.assertEqual(self.shortcut.paused, [True, False])
+        self.assertIsNone(self.book._keys_dialog)
+        self.assertFalse(dialog["window"].winfo_exists())
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Ctrl+Shift+F9")
+
+    def test_cancel_changes_nothing(self):
+        dialog = self.open_dialog()
+        press(dialog["picker"], "Alt_L", "k")
+        self.book._close_keys_dialog()  # Annulla, or the window's X
+        self.pump()
+        self.assertEqual(self.shortcut.changes, [])
+        self.assertEqual(self.shortcut.paused, [True, False])
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Alt+R")
+
+    def test_keys_this_pc_refuses_are_explained_and_the_old_ones_kept(self):
+        self.shortcut.works = False
+        dialog = self.open_dialog()
+        press(dialog["picker"], "Alt_L", "k")
+        dialog["save"].invoke()
+        self.pump()
+        self.assertIn("Alt+R", dialog["problem"].cget("text"))
+        self.assertTrue(dialog["window"].winfo_exists())  # still open, to try other keys
+        self.assertEqual(self.shortcut.paused, [True])
+        self.assertEqual(self.button_text(), "⌨️ Tasti: Alt+R")
+        self.book._close_keys_dialog()
+        self.assertEqual(self.shortcut.paused, [True, False])
+
+    def test_a_second_click_brings_back_the_same_window(self):
+        first = self.open_dialog()
+        self.assertIs(self.open_dialog(), first)
+        self.assertEqual(self.shortcut.paused, [True])
+
+    def test_shown_after_app_falls_back_to_alt_r(self):
+        self.shortcut.keys = "f9"
+        self.book.show_shortcut()  # thread-safe
+        self.pump()
+        self.assertEqual(self.button_text(), "⌨️ Tasti: F9")
+
+    def test_closing_twice_is_harmless(self):
+        self.book._keys_button.invoke()
+        self.pump()
+        self.book._close_keys_dialog()
+        self.book._close_keys_dialog()  # twice: harmless
+        self.assertEqual(self.shortcut.paused, [True, False])
+
+
+class LockedKeysButtonTest(GuiTestCase):
+    def make_shortcut(self):
+        self.shortcut = FakeShortcut("ctrl+shift+r", locked=True)
+        return self.shortcut
+
+    def test_keys_from_env_can_be_seen_but_not_changed(self):
+        self.book._keys_button.invoke()
+        self.pump()
+        dialog = self.book._keys_dialog
+        self.assertFalse(dialog["picker"].capturing)
+        self.assertEqual(dialog["save"].winfo_manager(), "")  # no Save button at all
+        self.book._close_keys_dialog()
+        self.assertEqual(self.shortcut.changes, [])
+
+
+class NoShortcutTest(GuiTestCase):
+    def test_no_keys_button_without_a_shortcut(self):
+        self.assertIsNone(self.book._keys_button)
+
+
+
+class UpdateNoticeTest(GuiTestCase):
+    """The strip over the page that says a newer Rick is out (the check
+    itself is rick/updates.py)."""
+
+    def banner_shown(self):
+        return self.book._update_banner.winfo_manager() == "pack"
+
+    def notice(self):
+        return self.book._update_link.cget("text")
+
+    def test_hidden_until_a_newer_version_is_found(self):
+        self.assertFalse(self.banner_shown())
+
+    def test_shown_over_the_page_from_the_checks_thread(self):
+        def driver():
+            # like updates.watch: called on its own thread while Tk runs
+            self.book.show_update("1.0.3")
+            call_on_tk(self.book.root, lambda: None)
+
+        run_with_mainloop(self.book.root, driver)
+        self.assertTrue(self.banner_shown())
+        self.assertEqual(
+            self.notice(),
+            f"🆕 Nuova versione: Rick 1.0.3 (tu hai la {rick.__version__}). Se qualcosa non funziona, "
+            "l'aggiornamento potrebbe averlo gia' risolto: clicca qui per scaricarlo",
+        )
+        main = self.book._update_banner.master
+        order = main.pack_slaves()
+        self.assertLess(order.index(self.book._update_banner), order.index(self.book._text.master))
+
+    def test_click_opens_the_download_page(self):
+        self.book.show_update("1.0.3")
+        self.pump()
+        self.book._update_link.event_generate("<Button-1>")
+        self.pump()
+        self.browser_open.assert_called_once_with(updates.DOWNLOAD_PAGE)
+
+    def test_x_hides_it_and_a_later_version_shows_it_again(self):
+        self.book.show_update("1.0.3")
+        self.pump()
+        self.book._update_hide.event_generate("<Button-1>")
+        self.pump()
+        self.assertFalse(self.banner_shown())
+        self.book.show_update("1.0.4")
+        self.pump()
+        self.assertTrue(self.banner_shown())
+        self.assertIn("1.0.4", self.notice())
+        self.browser_open.assert_not_called()
+
+    def test_the_page_and_the_x_stay_usable_at_minimum_size(self):
+        self.book.show_update("1.0.3")
+        for geometry in ("820x560", "640x420"):
+            with self.subTest(geometry=geometry):
+                self.book.root.geometry(geometry)
+                self.pump()
+                self.assertGreater(self.book._update_banner.winfo_height(), 10)
+                self.assertGreater(self.book._text.winfo_height(), 60)
+                self.assertTrue(self.book._update_hide.winfo_ismapped())  # the long notice leaves it room
+                self.assertGreater(self.book._update_hide.winfo_width(), 10)
+
+    def test_when_running_waits_for_the_window(self):
+        calls = []
+        self.book.when_running(lambda: calls.append(threading.current_thread()))
+        self.assertEqual(calls, [])
+        self.pump()
+        self.assertEqual(calls, [threading.main_thread()])
+
+
+class EnglishUpdateNoticeTest(GuiTestCase):
+    language = "en"
+
+    def test_notice_in_english(self):
+        self.book.show_update("1.1")
+        self.pump()
+        self.assertEqual(
+            self.book._update_link.cget("text"),
+            f"🆕 New version: Rick 1.1 (you have {rick.__version__}). If something isn't working, "
+            "the update may already fix it: click here to download it",
+        )
 
 
 if __name__ == "__main__":

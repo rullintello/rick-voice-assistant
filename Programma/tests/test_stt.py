@@ -62,5 +62,61 @@ class LocalModelTest(unittest.TestCase):
         self.assertEqual(FakeWhisperModel.calls, [("small", "cpu", "int8")])
 
 
+
+class PreloadTest(unittest.TestCase):
+    """The model is loaded when Rick starts, not at the first question."""
+
+    def setUp(self):
+        self.heard = []
+        patcher = mock.patch.object(stt, "_local_model", None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def fake_model(self, fail=None):
+        test = self
+
+        class Model:
+            def transcribe(self, audio, language, vad_filter):
+                test.heard.append((len(audio), language, vad_filter))
+                if fail:
+                    raise fail
+                return iter(()), None
+
+        return Model()
+
+    def test_loads_the_model_and_the_silence_filter_once(self):
+        model = self.fake_model()
+        with mock.patch.object(stt, "_load_local_model", return_value=model) as load, \
+                self.assertLogs(stt.log, "INFO") as logged:
+            stt.preload()
+            self.assertIs(stt._get_local_model(), model)  # the first question finds it ready
+        load.assert_called_once()
+        self.assertEqual(self.heard, [(16000, config.get_language(), True)])  # a second of silence
+        self.assertIn("Speech model ready", logged.output[-1])
+
+    def test_a_failure_is_logged_and_the_first_question_tries_again(self):
+        with mock.patch.object(stt, "_load_local_model", side_effect=OSError("no space left")), \
+                self.assertLogs(stt.log, "WARNING"):
+            stt.preload()  # doesn't raise
+        model = self.fake_model()
+        with mock.patch.object(stt, "_load_local_model", return_value=model):
+            self.assertIs(stt._get_local_model(), model)
+
+    def test_a_failing_warm_up_keeps_the_model(self):
+        model = self.fake_model(fail=RuntimeError("onnxruntime missing"))
+        with mock.patch.object(stt, "_load_local_model", return_value=model) as load, \
+                self.assertLogs(stt.log, "WARNING"):
+            stt.preload()
+            self.assertIs(stt._get_local_model(), model)
+        load.assert_called_once()
+
+    def test_runs_on_a_thread_that_ends_with_rick(self):
+        with mock.patch.object(stt, "preload") as preload:
+            thread = stt.preload_in_background()
+            thread.join(5)
+        preload.assert_called_once()
+        self.assertTrue(thread.daemon)
+
+
 if __name__ == "__main__":
     unittest.main()

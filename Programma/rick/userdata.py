@@ -58,8 +58,9 @@ def delete_all() -> None:
     """Erases everything Rick has saved about its user: every binder (so
     also the "second brain"), the saved API keys and language, the search
     cache, leftover audio and the log - including the backup/temp copies
-    jsonstore can leave next to each file, which hold the same data."""
-    for path in (config.HISTORY_FILE, config.USER_CONFIG_FILE, config.SEARCH_CACHE_FILE):
+    jsonstore can leave next to each file, which hold the same data. The
+    update check goes too: nothing personal in it, but nothing is left."""
+    for path in (config.HISTORY_FILE, config.USER_CONFIG_FILE, config.SEARCH_CACHE_FILE, config.UPDATE_CHECK_FILE):
         remove_quietly(path)
         for copy in (*path.parent.glob(f"{path.name}.corrupt-*"), *path.parent.glob(f".{path.name}.*.tmp")):
             remove_quietly(copy)

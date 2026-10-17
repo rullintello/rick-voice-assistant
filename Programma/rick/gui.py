@@ -7,7 +7,8 @@ import webbrowser
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from . import history, userdata
+from . import __version__, history, updates, userdata
+from .hotkey_picker import HotkeyPicker
 from .startup import describe_error
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,16 @@ _STRINGS = {
         ),
         "delete_all_done": "Fatto: tutti i tuoi dati sono stati cancellati da questo PC. Ora Rick si chiude.",
         "support_link": "☕ Offrimi un caffe",
+        "keys_button": "⌨️ Tasti: {keys}",
+        "keys_title": "Rick - tasti",
+        "keys_save": "Salva",
+        "keys_cancel": "Annulla",
+        "keys_close": "Chiudi",
+        "keys_failed": "Questi tasti non funzionano su questo PC: Rick continua a usare {keys}.",
+        "update_notice": (
+            "🆕 Nuova versione: Rick {new} (tu hai la {current}). "
+            "Se qualcosa non funziona, l'aggiornamento potrebbe averlo gia' risolto: clicca qui per scaricarlo"
+        ),
     },
     "en": {
         "title": "📖 Rick",
@@ -124,6 +135,16 @@ _STRINGS = {
         ),
         "delete_all_done": "Done: all your data has been deleted from this PC. Rick will now close.",
         "support_link": "☕ Buy me a coffee",
+        "keys_button": "⌨️ Keys: {keys}",
+        "keys_title": "Rick - keys",
+        "keys_save": "Save",
+        "keys_cancel": "Cancel",
+        "keys_close": "Close",
+        "keys_failed": "These keys don't work on this PC: Rick keeps using {keys}.",
+        "update_notice": (
+            "🆕 New version: Rick {new} (you have {current}). "
+            "If something isn't working, the update may already fix it: click here to download it"
+        ),
     },
 }
 
@@ -134,8 +155,13 @@ class BookWindow:
     method here is safe to call from any thread - they all marshal onto the
     Tk main thread via root.after(), since Tkinter itself is not thread-safe."""
 
-    def __init__(self, language: str, on_close=None, on_new_chat=None):
-        self._t = _STRINGS[language if language in _STRINGS else "it"]
+    def __init__(self, language: str, on_close=None, on_new_chat=None, shortcut=None):
+        self._language = language if language in _STRINGS else "it"
+        self._t = _STRINGS[self._language]
+        # app.Shortcut, for the "Keys" button (None: no button)
+        self._shortcut = shortcut
+        self._keys_button = None
+        self._keys_dialog = None
         self._on_close = on_close
         # Called when the conversation should start over even though the
         # active binder may keep the same name ("New chat" while already in
@@ -341,17 +367,26 @@ class BookWindow:
         tk.Frame(main, bg=_GOLD, height=2).pack(fill="x", padx=40, pady=(6, 12))
 
         # Packed (side="bottom") before the page, which would otherwise claim
-        # all the space first - same lesson as the status bar. Small and off
-        # to the side on purpose: it's rare, and not to be hit by accident.
+        # all the space first - same lesson as the status bar.
+        bottom_row = tk.Frame(main, bg=_PARCHMENT)
+        bottom_row.pack(side="bottom", fill="x", padx=24, pady=(0, 8))
+        self._add_background_texture(bottom_row, "paper_pixel.png")
+        # Small and off to the side on purpose: it's rare, and not to be hit
+        # by accident.
         tk.Button(
-            main,
+            bottom_row,
             text=self._t["delete_all_button"],
             font=(_SERIF, 9),
             command=self._on_delete_all_clicked,
-        ).pack(side="bottom", anchor="e", padx=24, pady=(0, 8))
+        ).pack(side="right")
+        if self._shortcut is not None:
+            self._keys_button = tk.Button(bottom_row, font=(_SERIF, 9), command=self._open_keys_dialog)
+            self._keys_button.pack(side="left")
+            self._update_keys_button()
 
         text_frame = tk.Frame(main, bg=_PARCHMENT)
         text_frame.pack(fill="both", expand=True, padx=24, pady=(0, 6))
+        self._build_update_banner(main, above=text_frame)
         scrollbar = tk.Scrollbar(text_frame)
         scrollbar.pack(side="right", fill="y")
         self._text = tk.Text(
@@ -376,6 +411,34 @@ class BookWindow:
         self._text.tag_configure("body", font=(_SERIF, 13), foreground=_TEXT_GREEN, spacing3=14)
         self._text.tag_configure("divider", font=(_SERIF, 12), foreground=_GOLD, justify="center", spacing3=14)
         self._text.tag_configure("empty", font=(_SERIF, 12, "italic"), foreground=_LEATHER_LIGHT)
+
+    def _build_update_banner(self, parent: tk.Widget, above: tk.Widget) -> None:
+        """The "new version" strip over the page: built now, shown by
+        show_update() (packed before `above`, so the page makes room)."""
+        self._update_above = above
+        self._update_banner = tk.Frame(parent, bg=_TEXT_GREEN)
+        # The X is packed first: pack() hands out space in packing order, and
+        # the long notice (not wrapped yet when first shown) would otherwise
+        # take the whole strip and leave the X no room at all.
+        self._update_hide = tk.Label(
+            self._update_banner, text="✕", font=("Segoe UI", 10), bg=_TEXT_GREEN, fg=_PARCHMENT, cursor="hand2", padx=10
+        )
+        self._update_hide.pack(side="right", fill="y")
+        self._update_hide.bind("<Button-1>", lambda _e: self._update_banner.pack_forget())
+        self._update_link = tk.Label(
+            self._update_banner,
+            font=(_SERIF, 11, "underline"),
+            bg=_TEXT_GREEN,
+            fg=_PARCHMENT,
+            cursor="hand2",
+            anchor="w",
+            justify="left",
+            padx=10,
+            pady=4,
+        )
+        self._update_link.pack(side="left", fill="x", expand=True)
+        self._update_link.bind("<Button-1>", lambda _e: webbrowser.open(updates.DOWNLOAD_PAGE))
+        self._update_link.bind("<Configure>", lambda e: self._update_link.configure(wraplength=max(e.width - 20, 100)))
 
     def _build_status_bar(self) -> None:
         self._status_var = tk.StringVar(value="")
@@ -466,6 +529,88 @@ class BookWindow:
         # neither the keys nor the conversation stay in memory either.
         userdata.delete_all()
         self._handle_close()
+
+    # ------------------------------------------------------------------
+    # The keys that start Rick (the "Keys" button, on the Tk thread)
+    # ------------------------------------------------------------------
+    def _update_keys_button(self) -> None:
+        if self._keys_button is not None:
+            self._keys_button.configure(text=self._t["keys_button"].format(keys=self._shortcut.label))
+
+    def _open_keys_dialog(self) -> None:
+        """A small window that's already waiting for the new keys: press
+        them, then Save. They work right away, no restart needed. While it's
+        open, the current keys don't start a recording."""
+        if self._keys_dialog is not None:
+            self._keys_dialog["window"].lift()
+            return
+        shortcut = self._shortcut
+        dialog = tk.Toplevel(self.root)
+        dialog.title(self._t["keys_title"])
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+
+        def picked(_keys: str) -> None:
+            save.configure(state="normal")
+            problem.configure(text="")
+
+        picker = HotkeyPicker(dialog, self._language, shortcut.keys, locked=shortcut.locked, on_picked=picked)
+        picker.frame.pack(padx=24, pady=(16, 4))
+        problem = tk.Label(dialog, fg="red", font=("Segoe UI", 9), wraplength=360, justify="center")
+        problem.pack(padx=24)
+        buttons = tk.Frame(dialog)
+        buttons.pack(pady=(8, 16))
+        cancel = tk.Button(
+            buttons,
+            text=self._t["keys_close" if shortcut.locked else "keys_cancel"],
+            font=("Segoe UI", 10),
+            padx=10,
+            command=self._close_keys_dialog,
+        )
+        cancel.pack(side="left", padx=6)
+        save = tk.Button(
+            buttons, text=self._t["keys_save"], font=("Segoe UI", 10), padx=10, state="disabled",
+            command=self._save_keys,
+        )
+        if not shortcut.locked:
+            save.pack(side="left", padx=6)
+
+        self._keys_dialog = {"window": dialog, "picker": picker, "save": save, "problem": problem}
+        dialog.protocol("WM_DELETE_WINDOW", self._close_keys_dialog)
+        shortcut.pause(True)
+        picker.start()
+
+    def _save_keys(self) -> None:
+        parts = self._keys_dialog
+        if not self._shortcut.change(parts["picker"].hotkey):
+            parts["problem"].configure(text=self._t["keys_failed"].format(keys=self._shortcut.label))
+            parts["save"].configure(state="disabled")
+            return
+        self._update_keys_button()
+        self._close_keys_dialog()
+
+    def _close_keys_dialog(self) -> None:
+        parts, self._keys_dialog = self._keys_dialog, None
+        if parts is None:
+            return
+        self._shortcut.pause(False)
+        parts["picker"].cancel()  # before destroy: losing the focus would cancel on dead widgets
+        parts["window"].destroy()
+
+    def show_shortcut(self) -> None:
+        """Thread-safe: shows the keys in use on the "Keys" button."""
+        self.root.after(0, self._update_keys_button)
+
+    def show_update(self, version: str) -> None:
+        """Thread-safe: says over the page that Rick `version` is out, with a
+        link to its download page. The ✕ hides it until Rick's next start."""
+
+        def _do() -> None:
+            self._update_link.configure(text=self._t["update_notice"].format(new=version, current=__version__))
+            if not self._update_banner.winfo_manager():
+                self._update_banner.pack(fill="x", padx=24, pady=(0, 8), before=self._update_above)
+
+        self.root.after(0, _do)
 
     def _activate_game(self, game: str) -> None:
         """Makes `game` the active binder: new questions get saved under it,
@@ -584,6 +729,12 @@ class BookWindow:
         if self._on_close:
             self._on_close()
         self.root.destroy()
+
+    def when_running(self, fn) -> None:
+        """Calls `fn` on the Tk thread once run() has the window going.
+        Threads started from there can use the thread-safe methods above at
+        once: before mainloop runs, Tkinter refuses calls from other threads."""
+        self.root.after(0, fn)
 
     def run(self) -> None:
         self.root.mainloop()

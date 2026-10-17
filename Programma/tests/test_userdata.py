@@ -50,6 +50,7 @@ class DeleteAllTest(unittest.TestCase):
         history.add_entry("Elden Ring", "q", "a")
         config.save_gemini_api_key("gem-key")
         jsonstore.write_json(config.SEARCH_CACHE_FILE, {"k": {"ts": 0, "context": "c"}})
+        jsonstore.write_json(config.UPDATE_CHECK_FILE, {"checked_at": 0, "latest": "1.0.3"})
         (self.tmp / "history.json.corrupt-20260101-000000").write_text("{old")
         (self.tmp / ".config.json.abc123.tmp").write_text('{"gemini_api_key": "gem-key"}')
         userdata.new_temp_path(".wav")
