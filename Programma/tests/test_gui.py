@@ -507,7 +507,11 @@ class UpdateNoticeTest(GuiTestCase):
 
         run_with_mainloop(self.book.root, driver)
         self.assertTrue(self.banner_shown())
-        self.assertEqual(self.notice(), f"🆕 Nuova versione: Rick 1.0.3 (tu hai la {rick.__version__}). Clicca qui per scaricarla")
+        self.assertEqual(
+            self.notice(),
+            f"🆕 Nuova versione: Rick 1.0.3 (tu hai la {rick.__version__}). Se qualcosa non funziona, "
+            "l'aggiornamento potrebbe averlo gia' risolto: clicca qui per scaricarlo",
+        )
         main = self.book._update_banner.master
         order = main.pack_slaves()
         self.assertLess(order.index(self.book._update_banner), order.index(self.book._text.master))
@@ -531,12 +535,16 @@ class UpdateNoticeTest(GuiTestCase):
         self.assertIn("1.0.4", self.notice())
         self.browser_open.assert_not_called()
 
-    def test_the_page_stays_usable_at_minimum_size(self):
+    def test_the_page_and_the_x_stay_usable_at_minimum_size(self):
         self.book.show_update("1.0.3")
-        self.book.root.geometry("640x420")
-        self.pump()
-        self.assertGreater(self.book._update_banner.winfo_height(), 10)
-        self.assertGreater(self.book._text.winfo_height(), 60)
+        for geometry in ("820x560", "640x420"):
+            with self.subTest(geometry=geometry):
+                self.book.root.geometry(geometry)
+                self.pump()
+                self.assertGreater(self.book._update_banner.winfo_height(), 10)
+                self.assertGreater(self.book._text.winfo_height(), 60)
+                self.assertTrue(self.book._update_hide.winfo_ismapped())  # the long notice leaves it room
+                self.assertGreater(self.book._update_hide.winfo_width(), 10)
 
     def test_when_running_waits_for_the_window(self):
         calls = []
@@ -554,7 +562,8 @@ class EnglishUpdateNoticeTest(GuiTestCase):
         self.pump()
         self.assertEqual(
             self.book._update_link.cget("text"),
-            f"🆕 New version: Rick 1.1 (you have {rick.__version__}). Click here to download it",
+            f"🆕 New version: Rick 1.1 (you have {rick.__version__}). If something isn't working, "
+            "the update may already fix it: click here to download it",
         )
 
 

@@ -98,7 +98,10 @@ _STRINGS = {
         "keys_cancel": "Annulla",
         "keys_close": "Chiudi",
         "keys_failed": "Questi tasti non funzionano su questo PC: Rick continua a usare {keys}.",
-        "update_notice": "🆕 Nuova versione: Rick {new} (tu hai la {current}). Clicca qui per scaricarla",
+        "update_notice": (
+            "🆕 Nuova versione: Rick {new} (tu hai la {current}). "
+            "Se qualcosa non funziona, l'aggiornamento potrebbe averlo gia' risolto: clicca qui per scaricarlo"
+        ),
     },
     "en": {
         "title": "📖 Rick",
@@ -138,7 +141,10 @@ _STRINGS = {
         "keys_cancel": "Cancel",
         "keys_close": "Close",
         "keys_failed": "These keys don't work on this PC: Rick keeps using {keys}.",
-        "update_notice": "🆕 New version: Rick {new} (you have {current}). Click here to download it",
+        "update_notice": (
+            "🆕 New version: Rick {new} (you have {current}). "
+            "If something isn't working, the update may already fix it: click here to download it"
+        ),
     },
 }
 
@@ -411,6 +417,14 @@ class BookWindow:
         show_update() (packed before `above`, so the page makes room)."""
         self._update_above = above
         self._update_banner = tk.Frame(parent, bg=_TEXT_GREEN)
+        # The X is packed first: pack() hands out space in packing order, and
+        # the long notice (not wrapped yet when first shown) would otherwise
+        # take the whole strip and leave the X no room at all.
+        self._update_hide = tk.Label(
+            self._update_banner, text="✕", font=("Segoe UI", 10), bg=_TEXT_GREEN, fg=_PARCHMENT, cursor="hand2", padx=10
+        )
+        self._update_hide.pack(side="right", fill="y")
+        self._update_hide.bind("<Button-1>", lambda _e: self._update_banner.pack_forget())
         self._update_link = tk.Label(
             self._update_banner,
             font=(_SERIF, 11, "underline"),
@@ -425,11 +439,6 @@ class BookWindow:
         self._update_link.pack(side="left", fill="x", expand=True)
         self._update_link.bind("<Button-1>", lambda _e: webbrowser.open(updates.DOWNLOAD_PAGE))
         self._update_link.bind("<Configure>", lambda e: self._update_link.configure(wraplength=max(e.width - 20, 100)))
-        self._update_hide = tk.Label(
-            self._update_banner, text="✕", font=("Segoe UI", 10), bg=_TEXT_GREEN, fg=_PARCHMENT, cursor="hand2", padx=10
-        )
-        self._update_hide.pack(side="right", fill="y")
-        self._update_hide.bind("<Button-1>", lambda _e: self._update_banner.pack_forget())
 
     def _build_status_bar(self) -> None:
         self._status_var = tk.StringVar(value="")
