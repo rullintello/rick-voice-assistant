@@ -223,8 +223,8 @@ Rick will ask for them again next time it starts.
 
 Rick is already tuned for short, fast answers by default:
 
-- the speech recognition model loads as soon as Rick starts, so the first
-  question is as quick as the others;
+- the speech recognition model and the voice library load as soon as Rick
+  starts, so the first question is as quick as the others;
 - Rick starts talking as soon as the first sentence of the answer is ready,
   while Gemini is still writing the rest, and each next sentence is turned
   into voice while the one before it plays. The written answer appears in
@@ -288,6 +288,10 @@ folder:
   name, for the web search;
 - to **Microsoft**'s speech service (edge-tts): the text of Rick's answer,
   to read it aloud.
+
+The first time only, the speech recognition model is downloaded from
+**Hugging Face** (about 500 MB); after that it's used from the copy on your
+PC, without asking again.
 
 And once a day, to **GitHub**: a request for the number of Rick's latest
 version, to tell you when a new one is out (see "Updating Rick"). It holds
@@ -604,8 +608,8 @@ cancella quel file e Rick te le richiedera' di nuovo al prossimo avvio.
 
 Rick e' gia' ottimizzato per risposte brevi e veloci di default:
 
-- il modello che riconosce la voce si carica appena Rick parte, cosi' anche
-  la prima domanda e' veloce come le altre;
+- il modello che riconosce la voce e la libreria della voce si caricano
+  appena Rick parte, cosi' anche la prima domanda e' veloce come le altre;
 - Rick inizia a parlare appena e' pronta la prima frase della risposta,
   mentre Gemini sta ancora scrivendo il resto, e ogni frase successiva
   diventa voce mentre suona quella prima. La risposta scritta compare nel
@@ -670,6 +674,10 @@ cartella utente:
   gioco, per la ricerca web;
 - al servizio vocale di **Microsoft** (edge-tts): il testo della risposta di
   Rick, per leggerla ad alta voce.
+
+Solo la prima volta, il modello che riconosce la voce viene scaricato da
+**Hugging Face** (circa 500 MB); poi si usa la copia sul tuo PC, senza
+chiedere di nuovo.
 
 E una volta al giorno, a **GitHub**: una richiesta del numero dell'ultima
 versione di Rick, per avvisarti quando ne esce una nuova (vedi "Aggiornare

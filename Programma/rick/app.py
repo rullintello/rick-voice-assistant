@@ -7,13 +7,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 import keyboard
 
-from . import __version__, config, hotkeys, updates, userdata
+from . import __version__, config, hotkeys, updates, userdata, warmup
 from .audio import Recorder, arm_playback, chime_start, chime_stop, interrupt_playback, play_audio
 from .brain import Rick
 from .gui import BookWindow
 from .sentences import sentences
 from .startup import describe_error, show_error_dialog
-from .stt import preload_in_background, transcribe
+from .stt import transcribe
 from .tts import synthesize
 
 STRINGS = {
@@ -148,9 +148,10 @@ class Shortcut:
 def main() -> None:
     logging.info("Rick %s starting", __version__)
     userdata.purge_leftover_temp_files()
-    # first thing: it loads while the first-run window asks for the keys, and
-    # while the player gets to the first question
-    preload_in_background()
+    # first thing: the speech model and the voice library load while the
+    # first-run window asks for the keys, and while the player gets to the
+    # first question
+    warmup.start()
     ensure_api_keys()
 
     rick = Rick()

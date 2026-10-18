@@ -203,7 +203,7 @@ class AppHarness(unittest.TestCase):
             "interrupt_playback": self.speaker.interrupt_playback,
             "chime_start": lambda: None,
             "chime_stop": lambda: None,
-            "preload_in_background": lambda: self.preloads.append(True),
+            "warmup": types.SimpleNamespace(start=lambda: self.preloads.append(True)),
         }
         for name, value in patches.items():
             patcher = mock.patch.object(app, name, value)
@@ -421,7 +421,7 @@ class StreamingTest(AppHarness):
 
 
 class SpeedTest(AppHarness):
-    def test_the_speech_model_loads_at_start_not_at_the_first_question(self):
+    def test_the_slow_parts_load_at_start_not_at_the_first_question(self):
         self.assertEqual(self.preloads, [True])
 
     def test_each_steps_time_is_logged(self):

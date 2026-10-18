@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import logging
 import sys
 import time
@@ -31,6 +32,17 @@ _UNAVAILABLE = {
 class VoiceUnavailableError(RuntimeError):
     """No voice could speak. Carries a short, readable message for the
     status bar; the technical details of each failure go to the log."""
+
+
+def preload() -> None:
+    """Loads the online voice's library ahead of the first answer: its
+    first import takes seconds on a cold PC (aiohttp and the parts it
+    loads), which the player would otherwise wait through before Rick's
+    first word. A failure is only logged: the first answer tries again."""
+    try:
+        importlib.import_module("edge_tts")
+    except Exception:
+        log.warning("Couldn't load the online voice's library in advance", exc_info=True)
 
 
 def synthesize(text: str, voice=None) -> str:

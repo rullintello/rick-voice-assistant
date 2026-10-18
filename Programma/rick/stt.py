@@ -1,4 +1,5 @@
 import logging
+import os
 import threading
 import time
 
@@ -18,15 +19,31 @@ def _get_local_model():
     return _local_model
 
 
+def _model_files() -> str:
+    """The folder with the speech model's files: the copy downloaded on the
+    first start. Hugging Face is asked only when there's no complete copy
+    yet. Asking it at every start (whether the model changed) was a request
+    each time, and a wait for its timeout when offline."""
+    from faster_whisper.utils import download_model
+
+    model = config.WHISPER_MODEL_SIZE
+    if os.path.isdir(model):  # RICK_WHISPER_MODEL_SIZE can name a folder
+        return model
+    try:
+        files = download_model(model, local_files_only=True)
+    except Exception:  # not downloaded yet
+        files = None
+    if not files or not os.path.isfile(os.path.join(files, "model.bin")):  # missing, or a cut download
+        files = download_model(model)
+    return files
+
+
 def _load_local_model():
     from faster_whisper import WhisperModel
 
+    files = _model_files()
     try:
-        return WhisperModel(
-            config.WHISPER_MODEL_SIZE,
-            device=config.WHISPER_DEVICE,
-            compute_type=config.WHISPER_COMPUTE_TYPE,
-        )
+        return WhisperModel(files, device=config.WHISPER_DEVICE, compute_type=config.WHISPER_COMPUTE_TYPE)
     except Exception:
         # RICK_WHISPER_DEVICE=cuda is a nice speed win on a gaming PC's
         # GPU, but only if CUDA/cuDNN are actually installed - if that
@@ -36,7 +53,7 @@ def _load_local_model():
             raise
         # logged, not printed: Rick runs with no console (pythonw)
         log.warning("GPU unavailable for transcription, using the CPU", exc_info=True)
-        return WhisperModel(config.WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+        return WhisperModel(files, device="cpu", compute_type="int8")
 
 
 def preload() -> None:
@@ -59,13 +76,6 @@ def preload() -> None:
         log.warning("Couldn't get the speech model ready in advance", exc_info=True)
         return
     log.info("Speech model ready in %.1fs", time.monotonic() - started)
-
-
-def preload_in_background() -> threading.Thread:
-    """preload() on its own thread, which ends with Rick."""
-    thread = threading.Thread(target=preload, name="speech-model", daemon=True)
-    thread.start()
-    return thread
 
 
 def transcribe(wav_path: str) -> str:
