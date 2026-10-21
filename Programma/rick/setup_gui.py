@@ -1,5 +1,10 @@
+import gc
 import tkinter as tk
 import webbrowser
+
+from . import hotkeys
+from .hotkey_picker import NOTE_COLOR, HotkeyPicker
+from .voice_picker import VoicePicker
 
 GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
 TAVILY_KEY_URL = "https://app.tavily.com"
@@ -40,12 +45,28 @@ DIALOG_STRINGS = {
 
 def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configurazione iniziale") -> dict:
     """Shows a dialog asking for the language, the Gemini (required) and
-    Tavily (optional, for web search) API keys. `prefill` (with the same
-    keys as the return value) lets this double as a "change settings"
-    screen - see settings.py. Returns {"gemini": "", "tavily": "",
-    "language": "it"} - "gemini" is "" only if the dialog was cancelled."""
-    prefill = prefill or {}
-    result = {"gemini": "", "tavily": "", "language": prefill.get("language", "it")}
+    Tavily (optional, for web search) API keys, Rick's voice and the keys
+    that start Rick. `prefill` lets this double as a "change settings"
+    screen - see settings.py: the same keys as the return value, plus
+    "hotkey_locked": True when .env decides the shortcut, "voices": the voice
+    id saved per language, and "locked_voice": the voice .env decides, if
+    any. Returns {"gemini": "", "tavily": "", "language": "it", "hotkey":
+    "alt+r", "voice": "giuseppe"} - "gemini" is "" only if the dialog was
+    cancelled, "hotkey" and "voice" are None when .env decides them."""
+    result = _run_dialog(prefill or {}, title)
+    # The closed window is still held by reference cycles among its widgets
+    # and callbacks, so Python's cycle collector frees it later - on whatever
+    # thread happens to run it, maybe one loading the speech model or
+    # answering a question. Tcl aborts the whole program when its interpreter
+    # is freed on another thread than the one that made it: free it now, here.
+    gc.collect()
+    return result
+
+
+def _run_dialog(prefill: dict, title: str) -> dict:
+    locked = bool(prefill.get("hotkey_locked"))
+    result = {"gemini": "", "tavily": "", "language": prefill.get("language", "it"), "hotkey": None, "voice": None}
+    chosen_hotkey = prefill.get("hotkey") or hotkeys.DEFAULT
 
     root = tk.Tk()
     root.title(title)
@@ -56,14 +77,14 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
         text="Lingua di Rick / Rick's language:",
         font=("Segoe UI", 11),
         justify="center",
-    ).pack(padx=24, pady=(24, 4))
+    ).pack(padx=24, pady=(16, 4))
 
     language_var = tk.StringVar(value=prefill.get("language", "it"))
     lang_frame = tk.Frame(root)
-    lang_frame.pack(pady=(0, 14))
+    lang_frame.pack(pady=(0, 10))
 
     gemini_label = tk.Label(root, font=("Segoe UI", 11), justify="center")
-    gemini_label.pack(padx=24, pady=(0, 10))
+    gemini_label.pack(padx=24, pady=(0, 6))
 
     gemini_entry = tk.Entry(root, width=48, font=("Segoe UI", 10), show=_HIDDEN)
     gemini_entry.insert(0, prefill.get("gemini", ""))
@@ -76,11 +97,11 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
     gemini_link = tk.Label(
         root, fg="#2b6cb0", cursor="hand2", font=("Segoe UI", 9, "underline")
     )
-    gemini_link.pack(pady=(2, 14))
+    gemini_link.pack(pady=(2, 8))
     gemini_link.bind("<Button-1>", lambda _event: webbrowser.open(GEMINI_KEY_URL))
 
     tavily_label = tk.Label(root, font=("Segoe UI", 11), justify="center")
-    tavily_label.pack(padx=24, pady=(0, 10))
+    tavily_label.pack(padx=24, pady=(0, 6))
 
     tavily_entry = tk.Entry(root, width=48, font=("Segoe UI", 10), show=_HIDDEN)
     tavily_entry.insert(0, prefill.get("tavily", ""))
@@ -89,7 +110,7 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
     tavily_link = tk.Label(
         root, fg="#2b6cb0", cursor="hand2", font=("Segoe UI", 9, "underline")
     )
-    tavily_link.pack(pady=(2, 14))
+    tavily_link.pack(pady=(2, 8))
     tavily_link.bind("<Button-1>", lambda _event: webbrowser.open(TAVILY_KEY_URL))
 
     show_keys_var = tk.BooleanVar(value=False)
@@ -101,10 +122,18 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
     show_keys = tk.Checkbutton(
         root, variable=show_keys_var, command=toggle_keys, font=("Segoe UI", 9)
     )
-    show_keys.pack(pady=(0, 10))
+    show_keys.pack(pady=(0, 4))
 
-    privacy_note = tk.Label(root, font=("Segoe UI", 9), fg="#555555", justify="center")
-    privacy_note.pack(padx=24, pady=(0, 12))
+    voice_picker = VoicePicker(
+        root, prefill.get("language", "it"), prefill.get("voices"), locked_voice=prefill.get("locked_voice")
+    )
+    voice_picker.frame.pack(padx=24, pady=(0, 6))
+
+    picker = HotkeyPicker(root, prefill.get("language", "it"), chosen_hotkey, locked=locked)
+    picker.frame.pack(padx=24, pady=(0, 8))
+
+    privacy_note = tk.Label(root, font=("Segoe UI", 9), fg=NOTE_COLOR, justify="center")
+    privacy_note.pack(padx=24, pady=(0, 8))
 
     save_button = tk.Button(root, font=("Segoe UI", 10), padx=12, pady=6)
 
@@ -115,6 +144,8 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
         tavily_label.config(text=strings["tavily_label"])
         tavily_link.config(text=strings["tavily_link"])
         show_keys.config(text=strings["show_keys"])
+        voice_picker.set_language(language_var.get())
+        picker.set_language(language_var.get())
         privacy_note.config(text=strings["privacy_note"])
         save_button.config(text=strings["save_button"])
         error_label.config(text="")
@@ -144,16 +175,23 @@ def ask_for_api_keys(prefill: dict | None = None, title: str = "Rick - configura
         result["gemini"] = gemini_key
         result["tavily"] = tavily_entry.get().strip()
         result["language"] = language_var.get()
+        result["hotkey"] = None if locked else picker.hotkey
+        result["voice"] = voice_picker.voice_id
+        picker.cancel()  # before destroy: losing the focus would cancel on dead widgets
         root.destroy()
 
     save_button.config(command=on_save)
-    save_button.pack(pady=(0, 20))
+    save_button.pack(pady=(0, 14))
     gemini_entry.bind("<Return>", lambda _event: on_save())
     tavily_entry.bind("<Return>", lambda _event: on_save())
 
     apply_language()
 
-    root.protocol("WM_DELETE_WINDOW", root.destroy)
+    def on_close() -> None:
+        picker.cancel()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
     root.update_idletasks()
     x = (root.winfo_screenwidth() - root.winfo_width()) // 2
     y = (root.winfo_screenheight() - root.winfo_height()) // 2

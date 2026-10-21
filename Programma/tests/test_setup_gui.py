@@ -1,25 +1,31 @@
 """The first-run / Settings dialog (rick/setup_gui.py): API keys hidden
-from anyone watching the screen, and still saved correctly."""
+from anyone watching the screen, and still saved correctly; the keys that
+start Rick, picked by pressing them."""
 
+import gc
 import tkinter as tk
 import unittest
+import weakref
+from tkinter import ttk
 from unittest import mock
 
-from rick import setup_gui
+from rick import hotkey_picker, setup_gui, voice_picker
 
 from support import require_display
+from test_hotkey_picker import press
 
 
 def widgets(root, cls):
     found = []
     for child in root.winfo_children():
-        if isinstance(child, cls):
+        # ttk's Combobox is a tk.Entry too: the voice list isn't a key field
+        if isinstance(child, cls) and not isinstance(child, ttk.Combobox):
             found.append(child)
         found += widgets(child, cls)
     return found
 
 
-class SetupDialogTest(unittest.TestCase):
+class DialogTestCase(unittest.TestCase):
     def setUp(self):
         require_display(self)
 
@@ -48,9 +54,15 @@ class SetupDialogTest(unittest.TestCase):
             raise errors[0]
         return result
 
-    def save(self, root):
-        next(b for b in widgets(root, tk.Button) if b.cget("command")).invoke()
+    def button(self, root, key):
+        texts = {strings[key] for strings in setup_gui.DIALOG_STRINGS.values()}
+        return next(b for b in widgets(root, tk.Button) if b.cget("text") in texts)
 
+    def save(self, root):
+        self.button(root, "save_button").invoke()
+
+
+class SetupDialogTest(DialogTestCase):
     def test_keys_are_hidden_even_when_prefilled(self):
         seen = {}
 
@@ -87,7 +99,9 @@ class SetupDialogTest(unittest.TestCase):
             self.save(root)
 
         result = self.run_dialog(driver)
-        self.assertEqual(result, {"gemini": "gem-typed", "tavily": "", "language": "it"})
+        self.assertEqual(
+            result, {"gemini": "gem-typed", "tavily": "", "language": "it", "hotkey": "alt+r", "voice": "giuseppe"}
+        )
 
     def test_privacy_note_in_both_languages(self):
         texts = {}
@@ -104,6 +118,165 @@ class SetupDialogTest(unittest.TestCase):
         self.assertIn("Google Gemini", texts["it"])
         self.assertIn("dati personali", texts["it"])
         self.assertIn("personal information", texts["en"])
+
+
+
+class ShortcutPickerTest(DialogTestCase):
+    """The keys row of the dialog (rick/hotkey_picker.py, tested in depth in
+    test_hotkey_picker.py): what it starts from and what the dialog returns."""
+
+    PREFILL = {"gemini": "gem-123", "language": "it"}
+
+    def setUp(self):
+        super().setUp()
+        self.pickers = []
+        test = self
+
+        class RecordedPicker(hotkey_picker.HotkeyPicker):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                test.pickers.append(self)
+
+        patcher = mock.patch.object(setup_gui, "HotkeyPicker", RecordedPicker)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_alt_r_is_shown_and_kept_by_default(self):
+        seen = {}
+
+        def driver(root):
+            seen["keys"] = self.pickers[0].box.cget("text")
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=self.PREFILL)
+        self.assertEqual(seen["keys"], "Alt+R")
+        self.assertEqual(result["hotkey"], "alt+r")
+
+    def test_picked_keys_are_returned(self):
+        def driver(root):
+            picker = self.pickers[0]
+            picker.button.invoke()
+            press(picker, "Control_L", "Shift_L", "F9")
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=self.PREFILL)
+        self.assertEqual(result["hotkey"], "ctrl+shift+f9")
+
+    def test_saving_while_still_waiting_keeps_the_old_keys(self):
+        def driver(root):
+            self.pickers[0].button.invoke()
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=dict(self.PREFILL, hotkey="ctrl+shift+r"))
+        self.assertEqual(result["hotkey"], "ctrl+shift+r")
+
+    def test_the_row_follows_the_language(self):
+        seen = {}
+
+        def driver(root):
+            _it, en_button = widgets(root, tk.Radiobutton)
+            en_button.invoke()
+            seen["button"] = self.pickers[0].button.cget("text")
+            root.destroy()
+
+        self.run_dialog(driver, prefill=self.PREFILL)
+        self.assertEqual(seen["button"], hotkey_picker.STRINGS["en"]["change"])
+
+    def test_keys_set_in_env_are_shown_but_locked(self):
+        seen = {}
+
+        def driver(root):
+            picker = self.pickers[0]
+            seen["keys"] = picker.box.cget("text")
+            seen["button"] = picker.button.cget("state")
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=dict(self.PREFILL, hotkey="ctrl+shift+r", hotkey_locked=True))
+        self.assertEqual(seen["keys"], "Ctrl+Shift+R")
+        self.assertEqual(seen["button"], "disabled")
+        self.assertIsNone(result["hotkey"])  # nothing to save: .env decides
+
+
+class VoiceRowTest(DialogTestCase):
+    """The voice row of the dialog (rick/voice_picker.py, tested in depth in
+    test_voices.py): what it starts from and what the dialog returns."""
+
+    PREFILL = {"gemini": "gem-123", "language": "it"}
+
+    def combobox(self, root):
+        found = []
+
+        def walk(widget):
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Combobox):
+                    found.append(child)
+                walk(child)
+
+        walk(root)
+        (box,) = found
+        return box
+
+    def test_the_selected_voice_is_returned(self):
+        def driver(root):
+            box = self.combobox(root)
+            box.set("Diego (maschile)")
+            box.event_generate("<<ComboboxSelected>>")
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=self.PREFILL)
+        self.assertEqual(result["voice"], "diego")
+
+    def test_switching_language_returns_that_languages_voice(self):
+        def driver(root):
+            _it, en_button = widgets(root, tk.Radiobutton)
+            en_button.invoke()
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=dict(self.PREFILL, voices={"it": "elsa", "en": "brian"}))
+        self.assertEqual((result["language"], result["voice"]), ("en", "brian"))
+
+    def test_a_voice_from_env_returns_nothing_to_save(self):
+        from rick import voices
+
+        env_voice = voices.Voice("env", "it-IT-IsabellaNeural", "it-IT-IsabellaNeural", gender="")
+
+        def driver(root):
+            self.save(root)
+
+        result = self.run_dialog(driver, prefill=dict(self.PREFILL, locked_voice=env_voice))
+        self.assertIsNone(result["voice"])
+
+
+
+class ClosedWindowTest(DialogTestCase):
+    def test_the_window_is_freed_before_returning(self):
+        # Left to Python's cycle collector, the closed window would be freed
+        # on whatever thread runs it next (e.g. the one loading the speech
+        # model), and Tcl aborts the program when that isn't the main thread.
+        windows = []
+        real_tk = tk.Tk
+
+        def tracked_tk():
+            root = real_tk()
+            windows.append(weakref.ref(root))
+            return root
+
+        def driver(root):
+            widgets(root, tk.Entry)[0].insert(0, "gem")
+            try_button = next(
+                b for b in widgets(root, tk.Button) if b.cget("text") == voice_picker.STRINGS["it"]["try"]
+            )
+            try_button.invoke()  # the sample's result check was what kept the window alive
+            root.after(300, lambda: self.save(root))
+
+        gc.disable()  # so only ask_for_api_keys itself can collect
+        try:
+            with mock.patch.object(tk, "Tk", tracked_tk), \
+                    mock.patch.object(voice_picker, "say_sample", lambda language, voice: True):
+                self.run_dialog(driver)
+            self.assertIsNone(windows[0](), "the closed window is still alive")
+        finally:
+            gc.enable()
 
 
 if __name__ == "__main__":

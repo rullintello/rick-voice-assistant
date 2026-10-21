@@ -17,6 +17,8 @@ buy me a coffee (optional): [ko-fi.com/rullintello](https://ko-fi.com/rullintell
 Rick is an assistant that runs in the background while you play. Press
 **Alt+R** to activate the microphone, ask your question ("how do I beat this
 boss?", "where's the legendary sword?", ...) and Rick answers out loud.
+Alt+R is the default: you can pick other keys with the **⌨️ Keys** button in
+Rick's window, or in the settings window.
 
 ## How it works
 
@@ -58,6 +60,11 @@ binder's conversation.
 - **Delete all your data** (bottom right) erases everything Rick has saved
   on this PC: binders, keys, cache and error log. It asks first, then Rick
   closes (see "Privacy and data").
+- **⌨️ Keys** (bottom left) shows the keys that start Rick: click it, press
+  the new keys, then **Save**. They work right away, no restart needed.
+- **🆕 New version**: a green strip above the page appears when a newer
+  Rick is out. Click it to open the download page, or ✕ to hide it until
+  Rick's next start (see "Updating Rick").
 - Clicking a binder in the list on the left reopens it and makes it the
   active one, to review past questions or keep asking new ones about that
   game.
@@ -105,7 +112,7 @@ The top-level folder only has what you actually need to use Rick
 config files) lives inside the `Programma` folder, so the folder doesn't
 look confusing the first time you open it.
 
-The library used for the global shortcut (`Alt+R`) on Windows sometimes
+The library used for the global shortcut (`Alt+R` by default) on Windows sometimes
 needs to run **as administrator** to keep working while a game is focused:
 right-click `Run Rick.bat` → "Run as administrator" if the shortcut stops
 responding.
@@ -117,9 +124,18 @@ one in 30 seconds, no credit card needed), then remembers both choices for
 next time — handy if you're sharing the project with someone else: they just
 pick their language and paste their own key the first time they open it.
 
-To change your language or keys **after** the initial setup, double-click
-`Settings.bat`: it reopens the same window pre-filled with what you chose
-before, so you don't have to start from scratch.
+To change your language, keys, voice or shortcut **after** the initial setup,
+double-click `Settings.bat`: it reopens the same window pre-filled with what
+you chose before, so you don't have to start from scratch.
+
+**The keys that start Rick** (Alt+R by default) are in the same window:
+press **Change**, then the keys you want, for example `Ctrl+Shift+R` or
+`F9`. A letter or a number needs Ctrl or Alt with it, so Rick doesn't start
+every time you type, and everyday shortcuts like Ctrl+C are refused (the
+window says why). Keys changed here are used the next time Rick starts; the
+**⌨️ Keys** button in Rick's window works the same way and applies them right
+away. Pick keys your game doesn't use: Rick doesn't block them, so
+the game receives them too.
 
 The same window also has an **optional** field for a Tavily key: if you
 paste one in, Rick actually searches the web (wikis, up-to-date guides)
@@ -128,6 +144,27 @@ accurate for rare items and specific quests. If you skip this field, Rick
 still works, just a little less precise on niche details. Searches are also
 cached locally: if someone asks the same thing a second time, Rick won't
 search again, saving the free quota.
+
+## Updating Rick
+
+Once a day Rick checks on GitHub whether a newer version is out, and if so
+says it in its window, with a green **🆕 New version** strip above the page.
+To update:
+
+1. Click the strip (or open the
+   [releases page](https://github.com/rullintello/rick-voice-assistant/releases/latest))
+   and download the new version's zip.
+2. Close Rick, delete the old Rick folder and extract the new zip in its
+   place. If you edited `Programma\.env`, copy it somewhere safe first and
+   put it back in the new `Programma` folder.
+3. Double-click `Run Rick.bat`. Like the first time, it shows the Python
+   notice and installs the libraries again (a few minutes).
+
+Your binders, keys, voice and shortcut stay as they are: they're saved in
+the `.rick` folder inside your user folder, not in Rick's folder.
+
+The check sends nothing about you (see "Privacy and data").
+`RICK_CHECK_UPDATES=false` in `.env` turns it off.
 
 ## Manual installation (Linux/Mac, or to customize)
 
@@ -154,16 +191,20 @@ and usually needs the script run with `sudo` (or add your user to the
 
 ## Customization
 
-- Change the shortcut by editing `RICK_HOTKEY` in `.env` (e.g. `ctrl+shift+r`).
+- The shortcut is easiest to change from `Settings.bat` (see above).
+  `RICK_HOTKEY` in `.env` (e.g. `ctrl+shift+r`) takes priority over that
+  choice, and also accepts any other key name the `keyboard` library knows.
 - **Language**: pick Italian/English in the first-run window, or set
   `RICK_LANGUAGE=it` or `=en` in `.env`. Changes Rick's prompt (answers in
   that language), the default voice, and the language hint for speech
   recognition.
-- The default voice is an adult female voice (`it-IT-ElsaNeural` for
-  Italian, `en-US-JennyNeural` for English). The only two free Italian
-  female voices with `edge-tts` are Elsa and `it-IT-IsabellaNeural` (more
-  youthful/childish) — force a different one with `RICK_EDGE_VOICE` in
-  `.env`.
+- **Rick's voice** is picked in the settings window (`Settings.bat`): a
+  few of Microsoft's free voices per language, male and female, with a
+  **▶ Try** button. By default Rick is a he: Giuseppe in Italian, a slightly
+  deeper Andrew in English. The choice applies from the next answer, even
+  with Rick open. Any other `edge-tts` voice can be set with
+  `RICK_EDGE_VOICE` in `.env` (with `RICK_EDGE_RATE` / `RICK_EDGE_PITCH`),
+  which then takes priority over the window.
 - Rick's "personality" and instructions live in the system prompt in
   `Programma/rick/brain.py` (`SYSTEM_PROMPT_IT` / `SYSTEM_PROMPT_EN`), free
   to edit.
@@ -180,8 +221,25 @@ Rick will ask for them again next time it starts.
 
 ## Making Rick faster (free)
 
-Rick is already tuned for short, fast answers by default, but if you still
-need more speed, these levers are all free:
+Rick is already tuned for short, fast answers by default:
+
+- the speech recognition model and the voice library load as soon as Rick
+  starts, so the first question is as quick as the others;
+- Rick starts talking as soon as the first sentence of the answer is ready,
+  while Gemini is still writing the rest, and each next sentence is turned
+  into voice while the one before it plays. The written answer appears in
+  the book once it's complete.
+
+To see which step slows an answer down on your PC, open `rick.log` (in the
+`.rick` folder inside your user folder). For every answer, an
+`Answer timings` line says how many seconds went to:
+
+- transcription;
+- the first sentence of the answer (web search and Gemini, split on the
+  `Answer:` line next to it);
+- its voice.
+
+If you still need more speed, these levers are all free:
 
 - **GPU for transcription**: if you have an Nvidia GPU with CUDA/cuDNN
   installed, set `RICK_WHISPER_DEVICE=cuda` in `.env` — transcription
@@ -221,7 +279,7 @@ folder:
 - the web search cache and the error log (`rick.log`, about 3 MB at most).
   Rick writes neither your keys nor your questions to it.
 
-**What goes online**, and only when you ask a question:
+**What goes online** when you ask a question:
 
 - to **Google Gemini**: the text of your question, the earlier messages of
   the current chat and, if the chat is named after a game, up to the last
@@ -230,6 +288,16 @@ folder:
   name, for the web search;
 - to **Microsoft**'s speech service (edge-tts): the text of Rick's answer,
   to read it aloud.
+
+The first time only, the speech recognition model is downloaded from
+**Hugging Face** (about 500 MB); after that it's used from the copy on your
+PC, without asking again.
+
+And once a day, to **GitHub**: a request for the number of Rick's latest
+version, to tell you when a new one is out (see "Updating Rick"). It holds
+nothing about you, your keys or your questions: GitHub only sees your IP
+address, as any website does. `RICK_CHECK_UPDATES=false` in `.env` turns it
+off.
 
 On Gemini's free tier, Google may use the content it receives to improve its
 services; the rules can differ by country: the official ones are in the
@@ -293,6 +361,20 @@ They need no microphone, speakers, keys or internet (all of that is
 simulated). The window tests need a screen: on a headless Linux machine run
 them with `xvfb-run -a python -m unittest discover -s tests`.
 
+Rick's libraries are pinned to exact, tested versions, and they're updated
+by hand on purpose. The one exception is `edge-tts`, which breaks whenever
+Microsoft changes its voice service:
+
+- a daily check on GitHub tries Rick's voices and opens an issue if
+  Microsoft stops answering;
+- Dependabot proposes the new `edge-tts` as a pull request as soon as it's
+  out.
+
+Each release's tag is `v` followed by `__version__` in
+`Programma/rick/__init__.py`: update that number before publishing a new
+release, or the new Rick will keep telling its users a newer version is
+out.
+
 Rick stays free for everyone. If you use it and want to say thanks, you can
 buy me a coffee (entirely optional) at
 [ko-fi.com/rullintello](https://ko-fi.com/rullintello).
@@ -309,6 +391,8 @@ offrirmi un caffe (facoltativo): [ko-fi.com/rullintello](https://ko-fi.com/rulli
 Rick e' un assistente che gira in background mentre giochi. Premi **Alt+R**
 per attivare il microfono, fai la tua domanda ("come si sconfigge questo
 boss?", "dove trovo la spada leggendaria?", ...) e Rick ti risponde a voce.
+Alt+R e' la combinazione di partenza: puoi sceglierne un'altra con il pulsante
+**⌨️ Tasti** nella finestra di Rick, oppure nella finestra delle impostazioni.
 
 ## Come funziona
 
@@ -354,6 +438,13 @@ la "pagina" aperta, con la conversazione di quel raccoglitore.
 - **Cancella tutti i tuoi dati** (in basso a destra) cancella da questo PC
   tutto quello che Rick ha salvato: raccoglitori, chiavi, cache e registro
   errori. Te lo chiede prima, poi Rick si chiude (vedi "Privacy e dati").
+- **⌨️ Tasti** (in basso a sinistra) mostra i tasti che fanno partire Rick:
+  cliccalo, premi i nuovi tasti, poi **Salva**. Funzionano subito, senza
+  riavviare Rick.
+- **🆕 Nuova versione**: quando esce una versione piu' nuova di Rick, sopra
+  la pagina compare una striscia verde. Cliccala per aprire la pagina da cui
+  scaricarla, oppure premi ✕ per nasconderla fino al prossimo avvio (vedi
+  "Aggiornare Rick").
 - Cliccando su un raccoglitore nella lista a sinistra lo riapri e lo rendi
   quello attivo, per rivedere le domande passate o continuare a fargliene di
   nuove su quel gioco.
@@ -402,7 +493,7 @@ Nella cartella principale trovi solo quello che serve per usare Rick
 file di configurazione) e' dentro la cartella `Programma`, per non creare
 confusione a chi apre la cartella per la prima volta.
 
-Il modulo usato per lo shortcut globale (`Alt+R`) su Windows a volte richiede
+Il modulo usato per lo shortcut globale (`Alt+R` di partenza) su Windows a volte richiede
 di eseguire il file **come amministratore** per funzionare anche quando un
 gioco e' in primo piano: tasto destro su `Run Rick.bat` → "Esegui come
 amministratore" se lo shortcut non risponde.
@@ -415,9 +506,18 @@ entrambe le scelte per le volte dopo — utile se passi il progetto a
 qualcun altro: gli basta scegliere la sua lingua e incollare la sua chiave
 alla prima apertura.
 
-Per cambiare lingua o chiavi **dopo** la prima configurazione, fai doppio
-click su `Settings.bat`: riapre la stessa finestra gia' precompilata con
-quello che avevi scelto, senza doverlo rifare da zero.
+Per cambiare lingua, chiavi, voce o scorciatoia **dopo** la prima configurazione,
+fai doppio click su `Settings.bat`: riapre la stessa finestra gia'
+precompilata con quello che avevi scelto, senza doverlo rifare da zero.
+
+**I tasti che fanno partire Rick** (Alt+R di partenza) sono nella stessa
+finestra: premi **Cambia**, poi i tasti che vuoi, per esempio `Ctrl+Shift+R`
+o `F9`. Con una lettera o un numero serve anche Ctrl o Alt, cosi' Rick non
+parte ogni volta che scrivi, e le scorciatoie di tutti i giorni come Ctrl+C
+non sono accettate (la finestra spiega perche'). I tasti cambiati qui valgono
+dal prossimo avvio di Rick; il pulsante **⌨️ Tasti** nella finestra di Rick
+funziona allo stesso modo e li applica subito. Scegli tasti che il tuo gioco
+non usa: Rick non li blocca, quindi arrivano anche al gioco.
 
 Nella stessa finestra c'e' anche un campo **facoltativo** per una chiave
 Tavily: se la incolli, Rick cerca davvero sul web (wiki, guide aggiornate)
@@ -427,6 +527,27 @@ campo, Rick funziona lo stesso, solo un po' meno preciso sui dettagli piu'
 di nicchia. Le ricerche vengono anche salvate in una piccola cache locale:
 se qualcuno chiede la stessa cosa una seconda volta, Rick non ricerca di
 nuovo, risparmiando la quota gratuita.
+
+## Aggiornare Rick
+
+Una volta al giorno Rick controlla su GitHub se e' uscita una versione piu'
+nuova e, se c'e', te lo dice nella sua finestra con una striscia verde
+**🆕 Nuova versione** sopra la pagina. Per aggiornare:
+
+1. Clicca la striscia (o apri la
+   [pagina delle versioni](https://github.com/rullintello/rick-voice-assistant/releases/latest))
+   e scarica lo zip della nuova versione.
+2. Chiudi Rick, cancella la vecchia cartella di Rick ed estrai al suo posto
+   il nuovo zip. Se avevi modificato `Programma\.env`, prima mettilo da
+   parte e poi rimettilo nella nuova cartella `Programma`.
+3. Fai doppio click su `Run Rick.bat`. Come la prima volta, mostra l'avviso
+   di Python e reinstalla le librerie (qualche minuto).
+
+Raccoglitori, chiavi, voce e tasti restano come li avevi: sono salvati nella
+cartella `.rick` dentro la tua cartella utente, non in quella di Rick.
+
+Il controllo non invia niente su di te (vedi "Privacy e dati").
+`RICK_CHECK_UPDATES=false` nel file `.env` lo spegne.
 
 ## Installazione manuale (Linux/Mac, o per personalizzare)
 
@@ -453,16 +574,22 @@ utente al gruppo `input`).
 
 ## Personalizzazione
 
-- Cambia la scorciatoia modificando `RICK_HOTKEY` in `.env` (es. `ctrl+shift+r`).
+- La scorciatoia si cambia piu' facilmente da `Settings.bat` (vedi sopra).
+  `RICK_HOTKEY` in `.env` (es. `ctrl+shift+r`) ha la precedenza su quella
+  scelta, e accetta anche qualsiasi altro nome di tasto che il modulo
+  `keyboard` conosce.
 - **Lingua**: scegli Italiano/English nella finestra al primo avvio, oppure
   imposta `RICK_LANGUAGE=it` o `=en` in `.env`. Cambia il prompt di Rick
   (risponde in quella lingua), la voce di default e la lingua suggerita al
   riconoscimento vocale.
-- La voce di default e' femminile adulta (`it-IT-ElsaNeural` in italiano,
-  `en-US-JennyNeural` in inglese). Le uniche due voci femminili italiane
-  gratuite con `edge-tts` sono Elsa e `it-IT-IsabellaNeural` (piu'
-  giovanile/da bambina) — forzane una diversa con `RICK_EDGE_VOICE` in
-  `.env`.
+- **La voce di Rick** si sceglie nella finestra delle impostazioni
+  (`Settings.bat`): alcune voci gratuite di Microsoft per ogni lingua,
+  maschili e femminili, con il pulsante **▶ Prova**. Di partenza Rick e' un
+  lui: Giuseppe in italiano, un Andrew un po' piu' grave in inglese. La
+  scelta vale dalla risposta successiva, anche con Rick aperto. Qualsiasi
+  altra voce di `edge-tts` si imposta con `RICK_EDGE_VOICE` in `.env` (con
+  `RICK_EDGE_RATE` / `RICK_EDGE_PITCH`), che allora ha la precedenza sulla
+  finestra.
 - Il "carattere" e le istruzioni di Rick sono nel prompt di sistema in
   `Programma/rick/brain.py` (`SYSTEM_PROMPT_IT` / `SYSTEM_PROMPT_EN`),
   modificabile liberamente.
@@ -479,8 +606,25 @@ cancella quel file e Rick te le richiedera' di nuovo al prossimo avvio.
 
 ## Velocizzare Rick (gratis)
 
-Rick e' gia' ottimizzato per risposte brevi e veloci di default, ma se hai
-ancora bisogno di piu' velocita', queste leve sono tutte gratuite:
+Rick e' gia' ottimizzato per risposte brevi e veloci di default:
+
+- il modello che riconosce la voce e la libreria della voce si caricano
+  appena Rick parte, cosi' anche la prima domanda e' veloce come le altre;
+- Rick inizia a parlare appena e' pronta la prima frase della risposta,
+  mentre Gemini sta ancora scrivendo il resto, e ogni frase successiva
+  diventa voce mentre suona quella prima. La risposta scritta compare nel
+  libro quando e' completa.
+
+Per capire quale passaggio rallenta una risposta sul tuo PC, apri
+`rick.log` (nella cartella `.rick` dentro la tua cartella utente). Per ogni
+risposta, una riga `Answer timings` dice quanti secondi sono serviti per:
+
+- la trascrizione;
+- la prima frase della risposta (ricerca web e Gemini, divisi nella riga
+  `Answer:` accanto);
+- la sua voce.
+
+Se hai ancora bisogno di piu' velocita', queste leve sono tutte gratuite:
 
 - **GPU per la trascrizione**: se hai una scheda video Nvidia con CUDA/cuDNN
   installati, imposta `RICK_WHISPER_DEVICE=cuda` in `.env` — la trascrizione
@@ -521,7 +665,7 @@ cartella utente:
 - la cache delle ricerche web e il registro errori (`rick.log`, al massimo
   circa 3 MB). Rick non ci scrive ne' le chiavi ne' le tue domande.
 
-**Cosa va online**, e solo quando fai una domanda:
+**Cosa va online** quando fai una domanda:
 
 - a **Google Gemini**: il testo della domanda, i messaggi precedenti della
   chat in corso e, se la chat ha il nome di un gioco, fino alle ultime 10
@@ -530,6 +674,16 @@ cartella utente:
   gioco, per la ricerca web;
 - al servizio vocale di **Microsoft** (edge-tts): il testo della risposta di
   Rick, per leggerla ad alta voce.
+
+Solo la prima volta, il modello che riconosce la voce viene scaricato da
+**Hugging Face** (circa 500 MB); poi si usa la copia sul tuo PC, senza
+chiedere di nuovo.
+
+E una volta al giorno, a **GitHub**: una richiesta del numero dell'ultima
+versione di Rick, per avvisarti quando ne esce una nuova (vedi "Aggiornare
+Rick"). Non contiene niente su di te, sulle tue chiavi o sulle tue domande:
+GitHub vede solo il tuo indirizzo IP, come qualsiasi sito.
+`RICK_CHECK_UPDATES=false` nel file `.env` lo spegne.
 
 Con il piano gratuito di Gemini, Google puo' usare i contenuti che riceve per
 migliorare i suoi servizi; le regole possono cambiare da paese a paese:
@@ -596,6 +750,20 @@ python -m unittest discover -s tests
 Non servono microfono, casse, chiavi o internet (sono tutti simulati). I
 test della finestra hanno bisogno di uno schermo: su Linux senza schermo
 lanciali con `xvfb-run -a python -m unittest discover -s tests`.
+
+Le librerie di Rick sono fissate a versioni precise e provate, e si
+aggiornano a mano apposta. L'unica eccezione e' `edge-tts`, che si rompe
+ogni volta che Microsoft cambia il suo servizio vocale:
+
+- un controllo giornaliero su GitHub prova le voci di Rick e apre una
+  segnalazione se Microsoft smette di rispondere;
+- Dependabot propone la nuova versione di `edge-tts` come pull request
+  appena esce.
+
+Il tag di ogni release e' `v` seguito da `__version__` in
+`Programma/rick/__init__.py`: aggiorna quel numero prima di pubblicare una
+nuova release, altrimenti il nuovo Rick continuera' a dire ai suoi utenti che
+e' uscita una versione piu' nuova.
 
 Rick resta gratuito per chiunque. Se lo usi e ti va di ringraziare, puoi
 offrirmi un caffe (del tutto facoltativo) su

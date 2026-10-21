@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import logging
 import sys
 import time
@@ -33,21 +34,34 @@ class VoiceUnavailableError(RuntimeError):
     status bar; the technical details of each failure go to the log."""
 
 
-def synthesize(text: str) -> str:
+def preload() -> None:
+    """Loads the online voice's library ahead of the first answer: its
+    first import takes seconds on a cold PC (aiohttp and the parts it
+    loads), which the player would otherwise wait through before Rick's
+    first word. A failure is only logged: the first answer tries again."""
+    try:
+        importlib.import_module("edge_tts")
+    except Exception:
+        log.warning("Couldn't load the online voice's library in advance", exc_info=True)
+
+
+def synthesize(text: str, voice=None) -> str:
     """Renders text to speech and returns the path to an audio file, which
     the caller deletes once it's been played: Microsoft's online voice when
-    it works, otherwise (on Windows) the voice built into Windows."""
+    it works, otherwise (on Windows) the voice built into Windows. `voice`
+    (a voices.Voice) defaults to the one picked in the settings."""
     global _online_unavailable_until
+    voice = voice or config.get_voice()
     if time.monotonic() >= _online_unavailable_until:
         try:
-            return _to_temp_file(".mp3", _render_online, text)
+            return _to_temp_file(".mp3", lambda t, path: _render_online(t, path, voice), text)
         except Exception:
             log.warning("Online voice (edge-tts) failed", exc_info=True)
             if _HAS_WINDOWS_VOICES:
                 _online_unavailable_until = time.monotonic() + _ONLINE_RETRY_AFTER_SECONDS
     if _HAS_WINDOWS_VOICES:
         try:
-            return _to_temp_file(".wav", _render_windows, text)
+            return _to_temp_file(".wav", lambda t, path: _render_windows(t, path, voice.gender), text)
         except Exception:
             log.warning("Windows voice failed too", exc_info=True)
     raise VoiceUnavailableError(_UNAVAILABLE[config.get_language()])
@@ -65,24 +79,40 @@ def _to_temp_file(suffix: str, render, text: str) -> str:
     return path
 
 
-async def _edge_tts_save(text: str, voice: str, out_path: str) -> None:
+async def _edge_tts_save(text: str, voice, out_path: str) -> None:
     import edge_tts
 
-    communicate = edge_tts.Communicate(
-        text, voice, rate=config.EDGE_RATE, pitch=config.EDGE_PITCH
-    )
+    communicate = edge_tts.Communicate(text, voice.name, rate=voice.rate, pitch=voice.pitch)
     await communicate.save(out_path)
 
 
-def _render_online(text: str, out_path: str) -> None:
+def _render_online(text: str, out_path: str, voice) -> None:
     # edge-tts: Microsoft Edge's online voices - free, no API key needed
-    asyncio.run(_edge_tts_save(text, config.get_edge_voice(), out_path))
+    asyncio.run(_edge_tts_save(text, voice, out_path))
 
 
-def _render_windows(text: str, out_path: str) -> None:
+def pick_windows_voice(tokens, languages: set, gender: str):
+    """Of Windows' installed voices (SAPI tokens), the best stand-in: Rick's
+    language and the picked voice's gender, else just the language, else
+    None (Windows' default voice). Attributes a voice doesn't have count as
+    not matching."""
+
+    def attribute(token, name: str) -> str:
+        try:
+            return token.GetAttribute(name) or ""
+        except Exception:
+            return ""
+
+    in_language = [t for t in tokens if set(attribute(t, "Language").lower().split(";")) & languages]
+    same_gender = [t for t in in_language if gender and attribute(t, "Gender").lower() == gender]
+    return (same_gender or in_language or [None])[0]
+
+
+def _render_windows(text: str, out_path: str, gender: str = "") -> None:
     """Windows' built-in voices (SAPI, through COM): always installed, work
     offline and send nothing anywhere. Uses a voice in Rick's language when
-    one is installed (Italian Windows ships one), else Windows' default."""
+    one is installed (Italian Windows ships one), of the same gender as the
+    picked voice if there's one, else Windows' default."""
     import comtypes
     import comtypes.client
 
@@ -92,17 +122,14 @@ def _render_windows(text: str, out_path: str) -> None:
     # traceback) would then be released too late and crash the process.
     comtypes.CoInitialize()
     voice = comtypes.client.CreateObject("SAPI.SpVoice")
-    wanted = _WINDOWS_VOICE_LANGUAGES.get(config.get_language(), set())
-    voices = voice.GetVoices()
-    for i in range(voices.Count):
-        token = voices.Item(i)
-        try:
-            languages = set(token.GetAttribute("Language").lower().split(";"))
-        except Exception:  # a voice without a Language attribute: skip it
-            continue
-        if languages & wanted:
-            voice.Voice = token
-            break
+    installed = voice.GetVoices()
+    token = pick_windows_voice(
+        [installed.Item(i) for i in range(installed.Count)],
+        _WINDOWS_VOICE_LANGUAGES.get(config.get_language(), set()),
+        gender,
+    )
+    if token is not None:
+        voice.Voice = token
     stream = comtypes.client.CreateObject("SAPI.SpFileStream")
     stream.Open(out_path, _SSFM_CREATE_FOR_WRITE)
     try:

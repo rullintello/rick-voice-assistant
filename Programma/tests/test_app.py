@@ -4,6 +4,7 @@ on_hotkey(), while each question is handled on app.py's own worker thread.
 Microphone, speakers, Whisper, Gemini, the voice and the window are all
 fakes, so these run anywhere - no display, no audio device, no network."""
 
+import logging
 import os
 import tempfile
 import threading
@@ -11,7 +12,7 @@ import types
 import unittest
 from unittest import mock
 
-from rick import app, config
+from rick import app, config, updates
 
 from support import isolate_rick_home, wait_until
 
@@ -21,12 +22,16 @@ ANSWER = "Lo trovi nella palude a nord del castello."
 class FakeBook:
     """Stands in for gui.BookWindow: same thread-safe API, no Tk."""
 
-    def __init__(self, language, on_close=None, on_new_chat=None):
+    def __init__(self, language, on_close=None, on_new_chat=None, shortcut=None):
         self.language = language
         self.on_new_chat = on_new_chat
+        self.shortcut = shortcut  # app.Shortcut: the window's "Keys" button drives it
+        self.shortcut_shown = 0
         self.game = "Elden Ring"
         self.statuses = []
         self.turns = []
+        self.when_running_calls = []  # what main() asked to run once the window goes
+        self.updates_shown = []
         self._lock = threading.Lock()
 
     def set_status(self, text):
@@ -44,6 +49,15 @@ class FakeBook:
     def append_turn(self, game, question, answer):
         with self._lock:
             self.turns.append((game, question, answer))
+
+    def show_shortcut(self):
+        self.shortcut_shown += 1
+
+    def show_update(self, version):
+        self.updates_shown.append(version)
+
+    def when_running(self, fn):
+        self.when_running_calls.append(fn)
 
     def run(self):
         pass  # the real one blocks in Tk's mainloop; the test drives instead
@@ -76,15 +90,24 @@ class FakeRick:
     def __init__(self):
         self.asked = []
         self.error = None
-        self.gate = None  # a threading.Event to hold ask() "thinking"
+        self.gate = None  # a threading.Event to hold ask_stream() "thinking"
+        # what ask_stream() yields: pieces of text, or an Event to wait for
+        # (Gemini still writing), or an exception (Gemini failing half-way)
+        self.pieces = [ANSWER[:10], ANSWER[10:]]
 
-    def ask(self, question, game=""):
+    def ask_stream(self, question, game=""):
         self.asked.append((question, game))
         if self.gate is not None:
-            assert self.gate.wait(5), "test never released ask()"
+            assert self.gate.wait(5), "test never released ask_stream()"
         if self.error is not None:
             raise self.error
-        return ANSWER
+        for piece in self.pieces:
+            if isinstance(piece, BaseException):
+                raise piece
+            if isinstance(piece, threading.Event):
+                assert piece.wait(5), "test never let Gemini go on"
+                continue
+            yield piece
 
     def reset_conversation(self):
         pass
@@ -128,17 +151,40 @@ class FakeSpeaker:
         self._stop.set()
 
 
-class AppTest(unittest.TestCase):
+class AppHarness(unittest.TestCase):
+    """Starts app.main() with every outside piece faked (see the module
+    docstring); the test classes below drive it."""
+
+    # the keys Rick should end up listening on, and how the status bar names them
+    hotkey, key_label = "alt+r", "Alt+R"
+
+    def prepare_settings(self):
+        """For subclasses: settings in place before Rick starts."""
+
     def setUp(self):
         self.tmp = isolate_rick_home(self)
+        self.prepare_settings()
         self.recorder = FakeRecorder(self.tmp)
         self.rick = FakeRick()
         self.resets = 0
         self.rick.reset_conversation = lambda: setattr(self, "resets", self.resets + 1)
         self.speaker = FakeSpeaker(self.tmp)
         self.question = "dove trovo lo scudo leggendario?"
-        hotkeys = {}
+        self.registered = {}
+        self.hotkey_attempts = []
         self.workers = []
+        self.preloads = []
+
+        self.unknown_to_keyboard = {"ctrl+nosuchkey"}
+
+        def add_hotkey(key, callback):
+            # like keyboard: a key name it doesn't know fails at registration,
+            # and what comes back removes the hotkey
+            self.hotkey_attempts.append(key)
+            if key in self.unknown_to_keyboard:
+                raise ValueError(f"Key {key!r} is not mapped to any known key.")
+            self.registered[key] = callback
+            return lambda: self.registered.pop(key)
 
         def worker_thread(*args, **kwargs):
             thread = threading.Thread(*args, **kwargs)
@@ -146,8 +192,8 @@ class AppTest(unittest.TestCase):
             return thread
 
         patches = {
-            "keyboard": mock.Mock(add_hotkey=lambda key, cb: hotkeys.__setitem__(key, cb)),
-            "threading": types.SimpleNamespace(Thread=worker_thread, Lock=threading.Lock),
+            "keyboard": mock.Mock(add_hotkey=add_hotkey),
+            "threading": types.SimpleNamespace(Thread=worker_thread, Lock=threading.Lock, Event=threading.Event),
             "Recorder": lambda: self.recorder,
             "Rick": lambda: self.rick,
             "transcribe": lambda path: self.question,
@@ -157,6 +203,7 @@ class AppTest(unittest.TestCase):
             "interrupt_playback": self.speaker.interrupt_playback,
             "chime_start": lambda: None,
             "chime_stop": lambda: None,
+            "warmup": types.SimpleNamespace(start=lambda: self.preloads.append(True)),
         }
         for name, value in patches.items():
             patcher = mock.patch.object(app, name, value)
@@ -166,14 +213,15 @@ class AppTest(unittest.TestCase):
         with mock.patch.object(app, "BookWindow", lambda **kw: books.append(FakeBook(**kw)) or books[-1]):
             app.main()
         self.book = books[0]
-        self.press = hotkeys[config.HOTKEY]
+        self.assertEqual(list(self.registered), [self.hotkey])
+        self.press = self.registered[self.hotkey]
 
     # -- helpers ---------------------------------------------------------
     def ready(self):
-        return app._t("status_ready", hotkey=config.HOTKEY)
+        return app._t("status_ready", hotkey=self.key_label)
 
     def recording(self):
-        return app._t("status_recording", hotkey=config.HOTKEY)
+        return app._t("status_recording", hotkey=self.key_label)
 
     def wait_for_status(self, text):
         self.assertTrue(wait_until(lambda: self.book.status == text),
@@ -192,6 +240,9 @@ class AppTest(unittest.TestCase):
         for path in self.recorder.wav_files + self.speaker.mp3_files:
             self.assertFalse(os.path.exists(path), path)
 
+
+
+class AppTest(AppHarness):
     # -- the happy path ----------------------------------------------------
     def test_a_normal_turn(self):
         self.assertEqual(self.book.status, self.ready())
@@ -228,7 +279,7 @@ class AppTest(unittest.TestCase):
         self.rick.error = RuntimeError("Gemini non raggiungibile")
         self.ask_one_question()
         self.assertTrue(wait_until(lambda: app._t("error_speech") in self.speaker.spoken))
-        expected = app._error_status(self.rick.error)
+        expected = app._error_status(self.rick.error, self.key_label)
         self.wait_for_status(expected)
         self.assertIn("Gemini non raggiungibile", expected)
         self.assertEqual(self.book.turns, [])  # errors are never saved to a binder
@@ -238,10 +289,10 @@ class AppTest(unittest.TestCase):
         self.assertEqual(self.book.status, self.recording())
 
     def test_long_error_messages_are_shortened_to_one_line(self):
-        status = app._error_status(RuntimeError("x" * 500 + "\n{'error': {...}}"))
+        status = app._error_status(RuntimeError("x" * 500 + "\n{'error': {...}}"), self.key_label)
         self.assertNotIn("\n", status)
         self.assertLess(len(status), 250)
-        self.assertEqual(app._error_status(RuntimeError()).count("RuntimeError"), 1)
+        self.assertEqual(app._error_status(RuntimeError(), self.key_label).count("RuntimeError"), 1)
 
     def test_microphone_failure_does_not_kill_alt_r(self):
         # keyboard runs hotkey callbacks with no error handling: an exception
@@ -306,6 +357,180 @@ class AppTest(unittest.TestCase):
         self.speaker.block = False
         self.press()
         self.assertEqual(self.book.status, self.recording())
+
+class StreamingTest(AppHarness):
+    """Rick starts talking at the first sentence, while Gemini is still
+    writing the rest of the answer."""
+
+    FIRST = "Lo trovi nella palude a nord del castello."
+    SECOND = "Attento al drago che fa la guardia."
+
+    def setUp(self):
+        super().setUp()
+        self.gemini_goes_on = threading.Event()
+        self.rick.pieces = [self.FIRST[:12], self.FIRST[12:] + " ", self.gemini_goes_on, self.SECOND]
+
+    def test_the_first_sentence_is_said_before_gemini_has_finished(self):
+        self.ask_one_question()
+        self.assertTrue(wait_until(lambda: self.speaker.spoken == [self.FIRST]))
+        self.assertTrue(self.speaker.playing.wait(5))
+        self.assertEqual(self.book.status, app._t("status_speaking"))
+        self.assertEqual(self.book.turns, [])  # not complete yet
+        self.gemini_goes_on.set()
+        self.wait_for_status(self.ready())
+        self.assertEqual(self.speaker.spoken, [self.FIRST, self.SECOND])
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, f"{self.FIRST} {self.SECOND}")])
+        self.assert_no_temp_files_left()
+
+    def test_interrupted_rick_says_no_more_but_the_answer_is_saved(self):
+        self.speaker.block = True
+        self.ask_one_question()
+        self.assertTrue(self.speaker.playing.wait(5))
+        self.press()  # speaking -> recording
+        self.gemini_goes_on.set()
+        self.join_worker(0)
+        self.assertEqual(self.speaker.spoken, [self.FIRST])  # the rest isn't said
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, f"{self.FIRST} {self.SECOND}")])
+        self.assertEqual(self.book.status, self.recording())
+        self.assert_no_temp_files_left()
+
+    def test_gemini_failing_half_way_is_explained_and_not_saved(self):
+        self.rick.pieces = [self.FIRST + " ", RuntimeError("Gemini cut off")]
+        self.ask_one_question()
+        expected = app._error_status(RuntimeError("Gemini cut off"), self.key_label)
+        self.wait_for_status(expected)
+        self.assertEqual(self.speaker.spoken, [self.FIRST, app._t("error_speech")])
+        self.assertEqual(self.book.turns, [])
+        self.assert_no_temp_files_left()
+
+    def test_a_voice_failing_half_way_leaves_no_files(self):
+        self.gemini_goes_on.set()
+        real = self.speaker.synthesize
+
+        def second_fails(text):
+            if text == self.SECOND:
+                raise OSError("voice service gone")
+            return real(text)
+
+        self.speaker.synthesize = second_fails
+        with mock.patch.object(app, "synthesize", second_fails):
+            self.ask_one_question()
+            self.wait_for_status(app._error_status(OSError("voice service gone"), self.key_label))
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, f"{self.FIRST} {self.SECOND}")])
+        self.assert_no_temp_files_left()
+
+
+class SpeedTest(AppHarness):
+    def test_the_slow_parts_load_at_start_not_at_the_first_question(self):
+        self.assertEqual(self.preloads, [True])
+
+    def test_each_steps_time_is_logged(self):
+        # rick.log then says which step makes answers slow on that PC
+        with self.assertLogs(level="INFO") as logged:
+            self.ask_one_question()
+            self.wait_for_status(self.ready())
+        (line,) = [message for message in logged.output if "Answer timings" in message]
+        for step in ("transcription", "first sentence", "its voice", "after the second beep"):
+            self.assertIn(step, line)
+
+    def test_nothing_heard_logs_no_timings(self):
+        self.question = ""
+        with self.assertLogs(level="INFO") as logged:
+            logging.info("start")  # assertLogs needs at least one line
+            self.ask_one_question()
+            self.wait_for_status(self.ready())
+        self.assertFalse([message for message in logged.output if "Answer timings" in message])
+
+
+class UpdateCheckTest(AppHarness):
+    """The check for a newer Rick (rick/updates.py) starts with the window
+    and reports to it."""
+
+    def test_starts_once_the_window_runs(self):
+        (start_check,) = self.book.when_running_calls
+        with mock.patch.object(updates, "start", lambda on_newer: on_newer("9.9.9")):
+            start_check()  # the check finds 9.9.9 and tells the window
+        self.assertEqual(self.book.updates_shown, ["9.9.9"])
+
+
+class UpdateCheckOffTest(AppHarness):
+    def prepare_settings(self):
+        patcher = mock.patch.object(config, "CHECK_FOR_UPDATES", False)  # RICK_CHECK_UPDATES=false
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_not_started(self):
+        self.assertEqual(self.book.when_running_calls, [])
+
+
+class PickedShortcutTest(AppTest):
+    """Every turn above again, on keys picked in the settings window."""
+
+    hotkey, key_label = "ctrl+shift+f9", "Ctrl+Shift+F9"
+
+    def prepare_settings(self):
+        config.save_hotkey("Ctrl+Shift+F9")
+
+    def test_status_bar_names_the_picked_keys(self):
+        self.assertIn("Ctrl+Shift+F9", self.book.status)
+        self.assertNotIn("Alt+R", self.book.status)
+
+
+class UnknownShortcutInEnvTest(AppTest):
+    """RICK_HOTKEY in .env naming a key keyboard doesn't know: Rick still
+    starts, listening on Alt+R, and every turn above works the same."""
+
+    def prepare_settings(self):
+        os.environ["RICK_HOTKEY"] = "ctrl+nosuchkey"  # restored by isolate_rick_home
+
+    def test_falls_back_to_alt_r(self):
+        self.assertEqual(self.hotkey_attempts, ["ctrl+nosuchkey", "alt+r"])
+        self.assertEqual(self.book.status, self.ready())
+
+
+class ChangeKeysWhileRunningTest(AppHarness):
+    """The window's "Keys" button (gui.py) calls app.Shortcut: new keys work
+    right away, without restarting Rick."""
+
+    def change(self, keys):
+        return self.book.shortcut.change(keys)
+
+    def test_new_keys_work_at_once_and_the_old_ones_stop(self):
+        self.assertTrue(self.change("Ctrl+K"))
+        self.assertEqual(list(self.registered), ["ctrl+k"])  # Alt+R removed
+        self.assertEqual(config.get_hotkey(), "ctrl+k")  # still there after a restart
+        self.assertEqual(self.book.status, app._t("status_ready", hotkey="Ctrl+K"))
+        self.registered["ctrl+k"]()  # idle -> recording, on the new keys
+        self.assertEqual(self.book.status, app._t("status_recording", hotkey="Ctrl+K"))
+
+    def test_keys_keyboard_refuses_leave_the_old_ones_working(self):
+        self.unknown_to_keyboard.add("ctrl+f12")
+        self.assertFalse(self.change("ctrl+f12"))
+        self.assertEqual(list(self.registered), ["alt+r"])
+        self.assertEqual(config.get_hotkey(), "alt+r")
+        self.ask_one_question()
+        self.wait_for_status(self.ready())
+
+    def test_current_keys_do_nothing_while_new_ones_are_picked(self):
+        self.book.shortcut.pause(True)  # the "Keys" window is open
+        self.press()
+        self.assertEqual(self.recorder.starts, 0)
+        self.book.shortcut.pause(False)
+        self.press()
+        self.assertEqual(self.book.status, self.recording())
+
+    def test_a_question_under_way_keeps_its_status(self):
+        self.press()  # recording
+        self.assertTrue(self.change("ctrl+k"))
+        self.assertEqual(self.book.status, self.recording())  # not "ready"
+        self.registered["ctrl+k"]()  # recording -> thinking, on the new keys
+        self.wait_for_status(app._t("status_ready", hotkey="Ctrl+K"))
+        self.assertEqual(self.book.turns, [("Elden Ring", self.question, ANSWER)])
+
+    def test_the_window_shows_the_keys_after_a_fallback(self):
+        self.assertEqual(self.book.shortcut_shown, 1)
+        self.assertEqual(self.book.shortcut.label, "Alt+R")
+
 
 if __name__ == "__main__":
     unittest.main()

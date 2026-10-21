@@ -1,0 +1,82 @@
+# Every day, checks that Microsoft's online voices still answer the edge-tts
+# version Rick ships. Microsoft changes that service without notice (on
+# 13 October 2026 every voice started answering 403, and Rick fell back to
+# Windows' robotic voice). When they stop answering, this opens an issue -
+# GitHub emails it to the maintainer - saying whether a newer edge-tts is
+# out. Dependabot (see dependabot.yml) proposes that update as a PR.
+name: voice check
+
+on:
+  schedule:
+    - cron: "17 6 * * *"  # every day at 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  voices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the edge-tts version Rick ships
+        id: pinned
+        run: |
+          version=$(sed -n 's/^edge-tts==\([0-9.]*\);.*/\1/p' Programma/requirements.txt)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          python -m pip install --disable-pip-version-check "edge-tts==$version"
+
+      - name: Ask Microsoft for Rick's default voices
+        id: speak
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import asyncio, os, sys
+          import edge_tts
+          sys.path.insert(0, "Programma")
+          from rick import voices  # plain data: no other library needed
+
+          async def main():
+              for language in voices.VOICES:
+                  voice = voices.find(language, None)
+                  path = f"{language}.mp3"
+                  await edge_tts.Communicate(voices.SAMPLE[language], voice.name, rate=voice.rate, pitch=voice.pitch).save(path)
+                  size = os.path.getsize(path)
+                  print(f"{voice.name}: {size} bytes")
+                  assert size > 1000, f"{voice.name} sent almost no audio"
+
+          asyncio.run(main())
+          PY
+
+      - name: Open an issue when they don't answer
+        if: steps.speak.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.pinned.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          latest=$(python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('https://pypi.org/pypi/edge-tts/json'))['info']['version'])" || echo "?")
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "in:title \"Microsoft's voices stopped working\"" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body "Still not working today ($RUN_URL). Newest edge-tts on PyPI: $latest."
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "Microsoft's voices stopped working (edge-tts $PINNED)" \
+              --body "The daily voice check couldn't get Rick's default voices from Microsoft with edge-tts $PINNED: $RUN_URL
+
+          Until this is fixed, Rick speaks with Windows' backup voice.
+
+          Newest edge-tts on PyPI: **$latest**. If it's newer than $PINNED, update both edge-tts lines in \`Programma/requirements.txt\` (Dependabot may already have opened that PR), check the tests are green, and publish a release.
+
+          ---
+          Il controllo giornaliero non riesce a ottenere le voci di Rick da Microsoft con edge-tts $PINNED. Finche' non si risolve, Rick parla con la voce di riserva di Windows. Versione piu' recente su PyPI: **$latest**: se e' piu' nuova, aggiornala in \`Programma/requirements.txt\` e pubblica una nuova versione."
+          fi
+          exit 1

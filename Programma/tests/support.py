@@ -6,6 +6,7 @@ GUI tests open real (briefly visible) Tk windows; on a machine with no
 display they're skipped automatically.
 """
 
+import gc
 import logging
 import os
 import queue
@@ -36,6 +37,7 @@ def isolate_rick_home(test: unittest.TestCase) -> Path:
         ("SEARCH_CACHE_FILE", "search_cache.json"),
         ("HISTORY_FILE", "history.json"),
         ("TEMP_DIR", "tmp"),
+        ("UPDATE_CHECK_FILE", "update_check.json"),
     ):
         patcher = mock.patch.object(config, attr, tmp / filename)
         patcher.start()
@@ -45,7 +47,7 @@ def isolate_rick_home(test: unittest.TestCase) -> Path:
     test.addCleanup(log_file.stop)
     env = mock.patch.dict(
         os.environ,
-        {"GEMINI_API_KEY": "test-key", "RICK_LANGUAGE": "it", "TAVILY_API_KEY": ""},
+        {"GEMINI_API_KEY": "test-key", "RICK_LANGUAGE": "it", "TAVILY_API_KEY": "", "RICK_HOTKEY": ""},
     )
     env.start()
     test.addCleanup(env.stop)
@@ -58,6 +60,23 @@ def require_display(test: unittest.TestCase) -> None:
     except tk.TclError as exc:
         test.skipTest(f"no display available: {exc}")
     root.destroy()
+
+
+def free_tk_after_test(test: unittest.TestCase, attr: str) -> None:
+    """Call right BEFORE registering the cleanup that destroys the window in
+    test.<attr>: once it's destroyed, this frees it at once, on this thread.
+
+    Otherwise it lingers in reference cycles (with the test itself, through
+    the callbacks it was given) until Python's cycle collector runs, on
+    whatever thread that happens to be - and Tcl aborts the whole test run
+    ("Tcl_AsyncDelete: async handler deleted by the wrong thread") when a Tk
+    interpreter is freed on another thread than the one that made it."""
+
+    def free() -> None:
+        setattr(test, attr, None)
+        gc.collect()
+
+    test.addCleanup(free)
 
 
 def wait_until(predicate, timeout: float = 5.0, interval: float = 0.02) -> bool:

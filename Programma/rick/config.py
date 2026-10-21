@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import jsonstore
+from . import hotkeys, jsonstore, voices
 
 # Only Rick's own .env (next to main.py). Called with no path, load_dotenv
 # also searches every parent folder - so a .env left by some other project
@@ -26,10 +26,12 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-HOTKEY = os.getenv("RICK_HOTKEY", "alt+r")
-
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 ENABLE_WEB_SEARCH = os.getenv("RICK_ENABLE_WEB_SEARCH", "true").strip().lower() in ("1", "true", "yes")
+
+# Once a day Rick asks GitHub which is its latest version, to say in the
+# window when a new one is out (see rick/updates.py).
+CHECK_FOR_UPDATES = os.getenv("RICK_CHECK_UPDATES", "true").strip().lower() in ("1", "true", "yes")
 
 # Per-user key storage so a friend you share the project with only has to
 # paste their keys once, in the first-run dialog (see rick/setup_gui.py) -
@@ -48,6 +50,9 @@ HISTORY_FILE = Path.home() / ".rick" / "history.json"
 # Temporary audio (the player's recorded question, Rick's spoken answer) -
 # see rick/userdata.py.
 TEMP_DIR = Path.home() / ".rick" / "tmp"
+
+# GitHub's last answer about Rick's latest version, and when it came.
+UPDATE_CHECK_FILE = Path.home() / ".rick" / "update_check.json"
 
 
 def _load_user_config() -> dict:
@@ -99,23 +104,78 @@ def save_language(language: str) -> None:
     _save_user_config_key("language", language)
 
 
+def hotkey_set_in_env() -> bool:
+    """True when RICK_HOTKEY in .env decides the shortcut, so the settings
+    window shows it instead of offering to change it."""
+    return bool(os.getenv("RICK_HOTKEY", "").strip())
+
+
+def get_hotkey() -> str:
+    """The keys that start/stop listening, in keyboard's syntax ("alt+r").
+    Checked in order: RICK_HOTKEY in .env, the keys picked in the settings
+    window, then Alt+R.
+
+    .env is the hand-edited, power-user route, so any name keyboard knows is
+    passed through as before (app.py falls back to Alt+R if keyboard rejects
+    it). A saved choice that isn't valid (config.json edited by hand) is
+    logged and skipped instead of stopping Rick."""
+    env_hotkey = os.getenv("RICK_HOTKEY", "").strip()
+    if env_hotkey:
+        try:
+            return hotkeys.parse(env_hotkey)
+        except hotkeys.HotkeyError:
+            return env_hotkey.lower()
+    stored = _load_user_config().get("hotkey", "")
+    if stored:
+        try:
+            return hotkeys.parse(stored)
+        except hotkeys.HotkeyError:
+            logging.getLogger(__name__).warning("Ignoring invalid saved hotkey %r, using %s", stored, hotkeys.DEFAULT)
+    return hotkeys.DEFAULT
+
+
+def save_hotkey(hotkey: str) -> None:
+    _save_user_config_key("hotkey", hotkeys.parse(hotkey))
+
+
 WHISPER_MODEL_SIZE = os.getenv("RICK_WHISPER_MODEL_SIZE", "small")
 WHISPER_DEVICE = os.getenv("RICK_WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE_TYPE = os.getenv("RICK_WHISPER_COMPUTE_TYPE", "int8")
 
-# it-IT-ElsaNeural / en-US-JennyNeural both read as natural adult female
-# voices (circa 25-30). it-IT-IsabellaNeural is the only other free Italian
-# voice but sounds more childish/youthful.
-_DEFAULT_EDGE_VOICE = {"it": "it-IT-ElsaNeural", "en": "en-US-JennyNeural"}
+# Only used with RICK_EDGE_VOICE: the voices offered in the settings window
+# (rick/voices.py) bring their own speed and pitch.
+EDGE_PITCH = os.getenv("RICK_EDGE_PITCH", "+0Hz").strip() or "+0Hz"
+EDGE_RATE = os.getenv("RICK_EDGE_RATE", "+0%").strip() or "+0%"
 
 
-def get_edge_voice() -> str:
+def voice_set_in_env() -> bool:
+    """True when RICK_EDGE_VOICE in .env decides the voice, so the settings
+    window shows that instead of offering a choice."""
+    return bool(os.getenv("RICK_EDGE_VOICE", "").strip())
+
+
+def get_voice(language: str | None = None) -> voices.Voice:
+    """Rick's voice for `language` (Rick's language if None): RICK_EDGE_VOICE
+    in .env if set (any edge-tts voice, with RICK_EDGE_RATE/PITCH), else the
+    one picked in the settings window, else that language's default."""
+    language = language or get_language()
     override = os.getenv("RICK_EDGE_VOICE", "").strip()
-    return override or _DEFAULT_EDGE_VOICE[get_language()]
+    if override:
+        return voices.Voice("env", override, override, gender="", rate=EDGE_RATE, pitch=EDGE_PITCH)
+    picked = _load_user_config().get("voices", {})
+    return voices.find(language, picked.get(language) if isinstance(picked, dict) else None)
 
 
-EDGE_PITCH = os.getenv("RICK_EDGE_PITCH", "+0Hz")
-EDGE_RATE = os.getenv("RICK_EDGE_RATE", "+0%")
+def save_voice(language: str, voice_id: str) -> None:
+    """Remembers the voice picked for `language` (each language keeps its own)."""
+    if voices.find(language, voice_id).id != voice_id:
+        raise ValueError(f"no voice {voice_id!r} for {language!r}")
+    data = _load_user_config()
+    picked = data.get("voices")
+    picked = dict(picked) if isinstance(picked, dict) else {}
+    picked[language] = voice_id
+    data["voices"] = picked
+    jsonstore.write_json(USER_CONFIG_FILE, data)
 
 SAMPLE_RATE = _env_int("RICK_SAMPLE_RATE", 16000)
 MAX_HISTORY_TURNS = _env_int("RICK_MAX_HISTORY_TURNS", 12)

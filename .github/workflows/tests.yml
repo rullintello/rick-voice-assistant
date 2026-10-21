@@ -15,6 +15,9 @@ jobs:
   tests:
     name: ${{ matrix.os }} / Python ${{ matrix.python }}
     runs-on: ${{ matrix.os }}
+    # the whole suite takes a couple of minutes: a test stuck waiting (e.g.
+    # for a window) fails here instead of holding the runner for 6 hours
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

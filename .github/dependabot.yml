@@ -1,0 +1,13 @@
+# Proposes a PR as soon as a new edge-tts is out: it's the one library Rick
+# depends on that breaks when someone else (Microsoft) changes things. The
+# others stay pinned and are updated by hand, on purpose: an update of
+# those is never urgent, and every one is a chance for a broken or
+# tampered release to reach Rick's users.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/Programma"
+    schedule:
+      interval: "daily"
+    allow:
+      - dependency-name: "edge-tts"
