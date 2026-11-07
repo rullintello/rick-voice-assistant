@@ -26,7 +26,12 @@ jobs:
             python: "3.12"
           - os: windows-latest
             python: "3.14"
-          - os: ubuntu-latest
+          # 24.04, not ubuntu-latest: on Ubuntu 26.04 (ubuntu-latest since
+          # 19 October 2026) PortAudio's PulseAudio support fails to start
+          # without a sound server, so importing sounddevice fails and so do
+          # the tests that import rick.audio. Desktop Linux runs a sound
+          # server; a CI runner doesn't.
+          - os: ubuntu-24.04
             python: "3.12"
     steps:
       - uses: actions/checkout@v5
