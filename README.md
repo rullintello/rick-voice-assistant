@@ -9,6 +9,9 @@
   <a href="https://www.virustotal.com/gui/file/f7be3967e49a0c8a3a3d6129cea979fa48ecd43710841660a8c79b5a72b7e970"><img src="https://img.shields.io/badge/VirusTotal-0%2F65%20(v1.0.2)-brightgreen" alt="VirusTotal 0/65"></a>
 </p>
 
+> 📱 **On your phone?** Rick runs on Windows PCs: save this page and download it from your computer.<br>
+> 📱 **Dal telefono?** Rick funziona su PC Windows: salva questa pagina e scaricalo dal computer.
+
 *[Leggi questo in italiano](#rick--assistente-vocale-per-videogiochi)*
 
 Free, open source ([GPLv3](LICENSE) license). If you like Rick and want to
@@ -90,6 +93,10 @@ the window: once it's sorted, press Alt+R again to retry.
 
 You only need [Python](https://www.python.org/downloads/), 3.10 to 3.14
 (if setup asks, check "Add python.exe to PATH").
+
+**You must be 18 or older.** Rick answers with Google Gemini, and Google
+allows its Gemini API, free key included, only to people 18 or older
+([Gemini API terms](https://ai.google.dev/gemini-api/terms)).
 
 Once that's done, **double-click `Run Rick.bat`**. On the first start a
 notice shows the link to Python's official site: once it's installed, tick
@@ -306,8 +313,9 @@ Rick personal information** (names, addresses, passwords...).
 
 Using Gemini and Tavily is governed by their terms of service, which you
 accept when you create the keys, including any requirements such as a
-minimum age: [Gemini API terms](https://ai.google.dev/gemini-api/terms) and
-the terms on [Tavily](https://tavily.com)'s site.
+minimum age: [Gemini API terms](https://ai.google.dev/gemini-api/terms)
+(Gemini requires you to be 18 or older) and the terms on
+[Tavily](https://tavily.com)'s site.
 
 Rick's voice uses, free of charge, the read-aloud service of the Microsoft
 Edge browser, through the open source `edge-tts` library. It isn't an
@@ -471,6 +479,10 @@ basso della finestra: risolto il problema, premi di nuovo Alt+R per riprovare.
 
 Richiede solo [Python](https://www.python.org/downloads/), dalla 3.10 alla
 3.14 (se l'installazione te lo chiede, spunta "Add python.exe to PATH").
+
+**Devi avere almeno 18 anni.** Rick risponde con Google Gemini, e Google
+permette di usare la sua API Gemini, chiave gratuita compresa, solo a chi ha
+almeno 18 anni ([termini dell'API Gemini](https://ai.google.dev/gemini-api/terms)).
 
 Fatto questo, **fai doppio click su `Run Rick.bat`**. Al primo avvio compare
 un avviso con il link al sito ufficiale di Python: quando l'hai installato,
@@ -692,8 +704,8 @@ Quindi **non dire a Rick dati personali** (nomi, indirizzi, password...).
 
 L'uso di Gemini e Tavily e' regolato dai loro termini di servizio, che accetti
 quando crei le chiavi, compresi eventuali requisiti come l'eta' minima:
-[termini dell'API Gemini](https://ai.google.dev/gemini-api/terms) e i termini
-sul sito di [Tavily](https://tavily.com).
+[termini dell'API Gemini](https://ai.google.dev/gemini-api/terms) (Gemini
+richiede almeno 18 anni) e i termini sul sito di [Tavily](https://tavily.com).
 
 La voce di Rick usa gratuitamente il servizio di lettura ad alta voce del
 browser Microsoft Edge, tramite la libreria open source `edge-tts`. Non e' un
